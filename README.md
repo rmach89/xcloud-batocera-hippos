@@ -12,6 +12,7 @@ An unofficial add-on that puts **Xbox Cloud Gaming** in the EmulationStation car
 - **Profiles:** each person gets their own Xbox sign-in. A PIN keeps children's and teens' profiles out of adults' accounts.
 - **Your games in Batocera's list (optional):** all cloud games, or only the ones you pick. Each comes with art, description and age rating, and can have a 3D game box. Picking one opens straight into it.
 - **Launch Single Game (optional):** picking Xbox Cloud Gaming in the carousel opens the app straight away.
+- **Settings in sections** (profile, general, stream, picture, controller, game list, help).
 - **Stream options in Settings:** resolution up to 1440p (with the internet speed each needs), sharpening, Clarity boost, contrast / colour / brightness, a stream stats box, controller vibration strength and GPU acceleration.
 - **Translations:** the app's own screens in 18 languages, following Batocera's language.
 

@@ -172,13 +172,22 @@ function loadConfig(profileId) {
 
 // Batocera's language (system.language in batocera.conf, e.g. de_DE), as one
 // of the app's languages
+// HippOS (a Debian-based gaming system built like Batocera) runs this too
+const HIPPOS_VERSION_FILE = process.env.XCLOUD_HIPPOS_VERSION || '/usr/share/hippos/version';
+const ON_HIPPOS = (() => { try { return fs.existsSync(HIPPOS_VERSION_FILE); } catch (e) { return false; } })();
+// the system's language: Batocera's batocera.conf, or HippOS's hippos.conf
+// (the same kind of file; batocera.conf is still read there if it has one)
 function batoceraLanguage() {
-  const conf = process.env.XCLOUD_BATOCERA_CONF || '/userdata/system/batocera.conf';
+  const confs = ON_HIPPOS
+    ? [process.env.XCLOUD_HIPPOS_CONF || '/userdata/system/hippos.conf', process.env.XCLOUD_BATOCERA_CONF || '/userdata/system/batocera.conf']
+    : [process.env.XCLOUD_BATOCERA_CONF || '/userdata/system/batocera.conf'];
   let loc = '';
-  try {
-    const m = fs.readFileSync(conf, 'utf8').match(/^[ \t]*system\.language[ \t]*=[ \t]*([A-Za-z_.@-]+)/m);
-    if (m) loc = m[1];
-  } catch (e) { /* no batocera.conf */ }
+  for (const conf of confs) {
+    try {
+      const m = fs.readFileSync(conf, 'utf8').match(/^[ \t]*system\.language[ \t]*=[ \t]*([A-Za-z_.@-]+)/m);
+      if (m) { loc = m[1]; break; }
+    } catch (e) { /* not there */ }
+  }
   if (!loc) loc = process.env.LANGUAGE || process.env.LC_ALL || process.env.LANG || '';
   return i18n.fromLocale(loc);
 }
@@ -600,6 +609,7 @@ function settingsHtml() {
     'on', 'off', 'reloadT', 'reloadHelp', 'reloadBtn', 'save', 'cancel', 'sHint', 'sHintR', 'custom', 'auto',
     'intro', 'introHelp', 'introAlways', 'introDaily', 'introOff', 'signOutT', 'signOutHelp', 'signOutBtn', 'signOutConfirm',
     'winT', 'winHelp', 'version', 'resT', 'resAuto', 'res1080', 'resHq', 'res1440', 'resHelpAuto', 'resHelp1080', 'resHelpHq', 'resHelp1440',
+    'secAcct', 'secGen', 'secStream', 'secPic', 'secPad', 'secBato', 'secHippos', 'secHelp', 'autoH',
     'gpuT', 'gpuHelp', 'shT', 'shHelp', 'clT', 'clHelp', 'ctT', 'saT', 'brT', 'picHelp', 'shLow', 'shMed', 'shHigh', 'statsT', 'statsHelp', 'vibT', 'vibHelp', 'introSound', 'introSoundHelp', 'muted',
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
@@ -614,7 +624,7 @@ function settingsHtml() {
   const state = {
     codes: i18n.REGION_CODES, names: i18n.REGION_NAMES, custom: custom ? cfg.start_url : null,
     region: currentRegion(), langs: [['auto', '']].concat(i18n.LANGS), choice: cfg.languageChoice,
-    detected: batoceraLanguage(), T, version: VERSION,
+    detected: batoceraLanguage(), T, version: VERSION, hippos: ON_HIPPOS,
     volume: cfg.volume, vmute: cfg.muted, soe: cfg.sign_out_on_exit, highlight: cfg.keyboard_highlight, intro: cfg.introMode, windows: cfg.stream_as_windows,
     res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration,
     pic: { ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness },
@@ -650,6 +660,8 @@ function settingsHtml() {
   .row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:9px 20px;margin:0 0 8px;
        border-radius:10px;background:#222;border:3px solid transparent;cursor:pointer}
   .row.on{border-color:#fff;background:#262f24}
+  .sec{font-size:15px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#6fbf5f;margin:18px 4px 8px}
+  .sec:first-child{margin-top:4px}
   .label{font-size:21px;font-weight:600}
   .help{font-size:14px;color:#9a9a9a;margin-top:2px;font-weight:400}
   .picker{display:flex;align-items:center;gap:12px}
@@ -695,22 +707,20 @@ function settingsHtml() {
   <h1 id="t">${GEAR_SVG} <span id="title" data-k="settings"></span></h1>
   <p class="sub"><span id="crumb">Xbox Cloud Gaming</span></p>
   <div class="list" id="list">
-  <div class="row" id="row-controls">
-    <div><div class="label" data-k="ctrlT"></div><div class="help" data-k="ctrlHelp"></div></div>
-    <span class="chip">${ICON_PAD} <span data-k="ctrlBtn"></span></span>
-  </div>
+  <div class="sec" data-k="secAcct"></div>
   <div class="row" id="row-user" style="display:${state.reload ? 'flex' : 'none'}">
     <div><div class="label" data-k="profT"></div><div class="help" id="user-help"></div></div>
     <span class="chip">${ICON_USER} <span data-k="profBtn"></span></span>
   </div>
-  <div class="row" id="row-reload" style="display:${state.reload ? 'flex' : 'none'}">
-    <div><div class="label" data-k="reloadT"></div><div class="help" data-k="reloadHelp"></div></div>
-    <span class="chip">${ICON_RELOAD} <span data-k="reloadBtn"></span></span>
+  <div class="row" id="row-signout">
+    <div><div class="label" data-k="signOutT"></div><div class="help" data-k="signOutHelp"></div></div>
+    <span class="chip" id="signout-chip">${ICON_SIGNOUT} <span id="signout"></span></span>
   </div>
-  <div class="row" id="row-cache">
-    <div><div class="label" data-k="cacheT"></div><div class="help" data-k="cacheHelp"></div></div>
-    <span class="chip">${ICON_CACHE} <span id="cache"></span></span>
+  <div class="row" id="row-soe">
+    <div><div class="label" data-k="soeT"></div><div class="help" data-k="soeHelp"></div></div>
+    <div class="picker"><span class="state" id="soe-state"></span><span class="toggle" id="soe"></span></div>
   </div>
+  <div class="sec" data-k="secGen"></div>
   <div class="row" id="row-region">
     <div><div class="label" data-k="region"></div><div class="help" data-k="regionHelp"></div></div>
     <div><div class="picker"><span class="arrow" id="prev">&#9664;</span><span class="value" id="region"></span><span class="arrow" id="next">&#9654;</span></div>
@@ -739,6 +749,11 @@ function settingsHtml() {
     <div class="picker"><span class="arrow" id="idown">&minus;</span><span class="bar" style="width:200px"><i id="ibar"></i></span><span class="arrow" id="iup">+</span><span class="pct" id="ipct" style="min-width:96px"></span>
     <span class="toggle" id="imute" style="margin-left:6px"></span></div>
   </div>
+  <div class="sec" data-k="secStream"></div>
+  <div class="row" id="row-res">
+    <div><div class="label" data-k="resT"></div><div class="help" id="res-help"></div></div>
+    <div class="picker"><span class="arrow" id="rsprev">&#9664;</span><span class="value" id="res" style="width:220px"></span><span class="arrow" id="rsnext">&#9654;</span></div>
+  </div>
   <div class="row" id="row-windows">
     <div><div class="label" data-k="winT"></div><div class="help" data-k="winHelp"></div></div>
     <div class="picker"><span class="state" id="windows-state"></span><span class="toggle" id="windows"></span></div>
@@ -747,10 +762,11 @@ function settingsHtml() {
     <div><div class="label" data-k="gpuT"></div><div class="help" data-k="gpuHelp"></div></div>
     <div class="picker"><span class="state" id="gpu-state"></span><span class="toggle" id="gpu"></span></div>
   </div>
-  <div class="row" id="row-res">
-    <div><div class="label" data-k="resT"></div><div class="help" id="res-help"></div></div>
-    <div class="picker"><span class="arrow" id="rsprev">&#9664;</span><span class="value" id="res" style="width:220px"></span><span class="arrow" id="rsnext">&#9654;</span></div>
+  <div class="row" id="row-stats">
+    <div><div class="label" data-k="statsT"></div><div class="help" data-k="statsHelp"></div></div>
+    <div class="picker"><span class="state" id="stats-state"></span><span class="toggle" id="stats"></span></div>
   </div>
+  <div class="sec" data-k="secPic"></div>
   <div class="row" id="row-sharpen">
     <div><div class="label" data-k="shT"></div><div class="help" data-k="shHelp"></div></div>
     <div class="picker"><span class="arrow" id="shprev">&#9664;</span><span class="value" id="sharpen" style="width:220px"></span><span class="arrow" id="shnext">&#9654;</span></div>
@@ -771,22 +787,16 @@ function settingsHtml() {
     <div><div class="label" data-k="brT"></div><div class="help" data-k="picHelp"></div></div>
     <div class="picker"><span class="arrow" id="brdown">&minus;</span><span class="bar" style="width:200px"><i id="brbar"></i></span><span class="arrow" id="brup">+</span><span class="pct" id="brpct" style="min-width:96px"></span></div>
   </div>
-  <div class="row" id="row-stats">
-    <div><div class="label" data-k="statsT"></div><div class="help" data-k="statsHelp"></div></div>
-    <div class="picker"><span class="state" id="stats-state"></span><span class="toggle" id="stats"></span></div>
+  <div class="sec" data-k="secPad"></div>
+  <div class="row" id="row-controls">
+    <div><div class="label" data-k="ctrlT"></div><div class="help" data-k="ctrlHelp"></div></div>
+    <span class="chip">${ICON_PAD} <span data-k="ctrlBtn"></span></span>
   </div>
   <div class="row" id="row-vib">
     <div><div class="label" data-k="vibT"></div><div class="help" data-k="vibHelp"></div></div>
     <div class="picker"><span class="arrow" id="vbdown">&minus;</span><span class="bar" style="width:200px"><i id="vibbar"></i></span><span class="arrow" id="vbup">+</span><span class="pct" id="vibpct" style="min-width:96px"></span></div>
   </div>
-  <div class="row" id="row-signout">
-    <div><div class="label" data-k="signOutT"></div><div class="help" data-k="signOutHelp"></div></div>
-    <span class="chip" id="signout-chip">${ICON_SIGNOUT} <span id="signout"></span></span>
-  </div>
-  <div class="row" id="row-soe">
-    <div><div class="label" data-k="soeT"></div><div class="help" data-k="soeHelp"></div></div>
-    <div class="picker"><span class="state" id="soe-state"></span><span class="toggle" id="soe"></span></div>
-  </div>
+  <div class="sec" data-k="${ON_HIPPOS ? 'secHippos' : 'secBato'}"></div>
   <div class="row" id="row-glist">
     <div><div class="label" data-k="glT"></div><div class="help" id="gl-help"></div></div>
     <div class="picker"><span class="arrow" id="gprev">&#9664;</span><span class="value" id="glist" style="width:260px"></span><span class="arrow" id="gnext">&#9654;</span></div>
@@ -798,6 +808,15 @@ function settingsHtml() {
   <div class="row" id="row-g3d" style="display:none">
     <div><div class="label" data-k="g3dT"></div><div class="help" data-k="g3dHelp"></div></div>
     <div class="picker"><span class="state" id="g3d-state"></span><span class="toggle" id="g3d"></span></div>
+  </div>
+  <div class="sec" data-k="secHelp"></div>
+  <div class="row" id="row-reload" style="display:${state.reload ? 'flex' : 'none'}">
+    <div><div class="label" data-k="reloadT"></div><div class="help" data-k="reloadHelp"></div></div>
+    <span class="chip">${ICON_RELOAD} <span data-k="reloadBtn"></span></span>
+  </div>
+  <div class="row" id="row-cache">
+    <div><div class="label" data-k="cacheT"></div><div class="help" data-k="cacheHelp"></div></div>
+    <span class="chip">${ICON_CACHE} <span id="cache"></span></span>
   </div>
   <div class="row" id="row-logs">
     <div><div class="label" data-k="logsT"></div><div class="help" id="logs-help"></div></div>
@@ -833,10 +852,14 @@ function settingsHtml() {
   // either choice; they come and go as the choice above them changes
   var rows = [], LAST = 0;
   function buildRows() {
-    rows = ['row-controls'].concat(S.reload ? ['row-user', 'row-reload'] : []).concat(['row-cache'])
-      .concat(['row-region', 'row-language', 'row-volume', 'row-highlight', 'row-intro', 'row-isound', 'row-windows', 'row-gpu', 'row-res', 'row-sharpen', 'row-clarity', 'row-ct', 'row-sa', 'row-br', 'row-stats', 'row-vib', 'row-signout', 'row-soe'])
-      .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : [])
-      .concat(['row-logs', 'row-update', 'buttons']));
+    // the same order as on screen, section by section
+    rows = (S.reload ? ['row-user'] : []).concat(['row-signout', 'row-soe'])
+      .concat(['row-region', 'row-language', 'row-volume', 'row-highlight', 'row-intro', 'row-isound'])
+      .concat(['row-res', 'row-windows', 'row-gpu', 'row-stats'])
+      .concat(['row-sharpen', 'row-clarity', 'row-ct', 'row-sa', 'row-br'])
+      .concat(['row-controls', 'row-vib'])
+      .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : []))
+      .concat(S.reload ? ['row-reload'] : []).concat(['row-cache', 'row-logs', 'row-update', 'buttons']);
     LAST = rows.length - 1;
     ['row-gpick', 'row-g3d'].forEach(function (id) { document.getElementById(id).style.display = rows.indexOf(id) >= 0 ? 'flex' : 'none'; });
   }
@@ -918,7 +941,7 @@ function settingsHtml() {
     if (copen) renderControls();
     $('region').textContent = regionName(regions[ri]);
     $('count').textContent = tx('of', { i: ri + 1, n: regions.length });
-    $('language').textContent = S.langs[li][0] === 'auto' ? tx('auto', { lang: autonym(S.detected) }) : S.langs[li][1];
+    $('language').textContent = S.langs[li][0] === 'auto' ? tx(S.hippos ? 'autoH' : 'auto', { lang: autonym(S.detected) }) : S.langs[li][1];
     $('lcount').textContent = tx('of', { i: li + 1, n: S.langs.length });
     $('vbar').style.width = S.volume + '%';
     $('vbar').parentNode.className = 'bar' + (S.vmute ? ' off' : '');
@@ -968,7 +991,14 @@ function settingsHtml() {
     rows.forEach(function (id, i) { if (id !== 'buttons') $(id).className = 'row' + (i === row ? ' on' : ''); });
     $('save').className = 'save' + (row === LAST && btn === 0 ? ' on' : '');
     $('cancel').className = 'cancel' + (row === LAST && btn === 1 ? ' on' : '');
-    if (cur() !== 'buttons') { try { $(cur()).scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+    if (cur() !== 'buttons') {
+      try {
+        // the first row of a section brings its heading into view too
+        var el = $(cur()), prev = el.previousElementSibling;
+        if (prev && prev.className === 'sec') prev.scrollIntoView({ block: 'nearest' });
+        el.scrollIntoView({ block: 'nearest' });
+      } catch (e) {}
+    }
   }
   function go(path) {
     if (sent) return;
@@ -2602,8 +2632,6 @@ function makeZip(files) {   // [{name, data: Buffer}] -> Buffer
 }
 // Batocera's version, from its own file ("42 2025/08/20 12:00"): "Batocera 42 (2025/08/20)"
 // HippOS (a Debian-based gaming system built like Batocera) runs this too
-const HIPPOS_VERSION_FILE = process.env.XCLOUD_HIPPOS_VERSION || '/usr/share/hippos/version';
-const ON_HIPPOS = (() => { try { return fs.existsSync(HIPPOS_VERSION_FILE); } catch (e) { return false; } })();
 function batoceraVersion() {
   if (ON_HIPPOS) {
     let v = '';

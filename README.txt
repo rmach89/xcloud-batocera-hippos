@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.1.34 (November 2026)
+Version 1.2.0 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -123,16 +123,32 @@ F1 > Applications > Xbox Cloud Gaming Settings.
 Controller: up / down to move, left / right to change, A to select, Menu
 to save, B to cancel. Keyboard: arrows, Enter, S to save, Esc to cancel.
 
-  Controls                   every button and key the app uses
+The rows are grouped in sections:
+
+  PROFILE AND ACCOUNT
   Change user                the profile screen (see Profiles)
-  Reload dashboard           reloads Xbox if it's stuck or blank
-  Clear cache                clears stored web pages (you stay signed in)
+  Sign out of Xbox           press twice to sign out
+  Sign out when closing      signs out every time the app closes (for a
+                             shared machine)
+
+  GENERAL
   Region                     the country and language of the Xbox site
   Language                   the language of the app's own screens
+                             ("Same as Batocera", or "Same as HippOS"
+                             on HippOS, follows the system's language)
   Volume                     the app's volume (0-100%), or mute
   Light up keys when typing  real-keyboard keys light up on screen
   Intro video                every time / once a day / off
   Intro video sound          the intro's volume, or mute
+
+  STREAM
+  Stream resolution          720p (standard, about 10 Mbps internet,
+                             20 recommended) / 1080p (about 20 Mbps) /
+                             1080p high quality (about 30 Mbps) / 1440p
+                             (about 35 Mbps; needs Game Pass Ultimate and
+                             a game that offers it, otherwise Xbox sends
+                             1080p). Wired is best. There's no 4K. Starts
+                             with the next game
   Stream as a Windows PC     tells Xbox this is a Windows PC; may give a
                              sharper picture on some machines (reloads
                              the dashboard)
@@ -141,13 +157,11 @@ to save, B to cancel. Keyboard: arrows, Enter, S to save, Esc to cancel.
                              machines; turn it off if the screen flickers
                              or goes black. Applies the next time the app
                              opens, for everyone on this machine
-  Stream resolution          720p (standard, about 10 Mbps internet,
-                             20 recommended) / 1080p (about 20 Mbps) /
-                             1080p high quality (about 30 Mbps) / 1440p
-                             (about 35 Mbps; needs Game Pass Ultimate and
-                             a game that offers it, otherwise Xbox sends
-                             1080p). Wired is best. There's no 4K. Starts
-                             with the next game
+  Stream stats               a small box at the top while you play:
+                             resolution, frame rate, ping, bitrate,
+                             packet loss and decode time
+
+  PICTURE
   Sharpening                 off / low / medium / high. Sharpens the
                              game's picture; uses more processing power,
                              so lower it if games stutter
@@ -155,16 +169,19 @@ to save, B to cancel. Keyboard: arrows, Enter, S to save, Esc to cancel.
                              switch (works together with the sliders)
   Contrast, Colour           fine-tune the game's picture, 50-150%.
   saturation, Brightness     A / Enter puts a slider back to 100%
-  Stream stats               a small box at the top while you play:
-                             resolution, frame rate, ping, bitrate,
-                             packet loss and decode time
+
+  CONTROLLER
+  Controls                   every button and key the app uses
   Controller vibration       how strong the rumble is in games: off, 25%,
                              50%, 75% or 100%
-  Sign out of Xbox           press twice to sign out
-  Sign out when closing      signs out every time the app closes (for a
-                             shared machine)
+
+  BATOCERA (HIPPOS ON HIPPOS)
   Batocera game list         off / all cloud games / games I pick
   3D game boxes              3D cases instead of flat box art
+
+  HELP AND MAINTENANCE
+  Reload dashboard           reloads Xbox if it's stuck or blank
+  Clear cache                clears stored web pages (you stay signed in)
   Save logs for help         puts the logs and settings in one zip:
                              /userdata/xcloud-logs-<date>-<time>.zip
                              (gamertags are replaced; nothing about
@@ -360,13 +377,18 @@ Settings > Save logs for help puts them in one zip for sending.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
-What's new in 1.1.34
---------------------
+What's new in 1.2.0
+-------------------
 - New stream options in Settings, saved for each profile: Stream
   resolution (up to 1440p, with the internet speed each needs),
   Sharpening, Clarity boost, Contrast / Colour saturation / Brightness
   sliders, Stream stats and Controller vibration strength. They're
   logged in xcloud-app.log when saved and when a game starts.
+- The Settings screen is organised into sections: Profile and account,
+  General, Stream, Picture, Controller, Batocera (HippOS on HippOS), and
+  Help and maintenance.
+- On HippOS the language choice reads "Same as HippOS" and follows
+  HippOS's own language setting (hippos.conf).
 - GPU acceleration is now in Settings (it was only in config.json), and
   also turns on hardware decoding of the game's video. The log notes
   what the engine reports for the graphics chip.
