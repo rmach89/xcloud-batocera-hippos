@@ -175,7 +175,7 @@ The rows are grouped in sections:
   Controller vibration       how strong the rumble is in games: off, 25%,
                              50%, 75% or 100%
 
-  BATOCERA (HIPPOS ON HIPPOS)
+  EMULATIONSTATION
   Batocera game list         off / all cloud games / games I pick
   3D game boxes              3D cases instead of flat box art
 
@@ -389,7 +389,7 @@ What's new in 1.2.0
   recommends it on either system, and it's off unless you choose it.
   Installing again keeps your earlier choice.
 - The Settings screen is organised into sections: Profile and account,
-  General, Stream, Picture, Controller, Batocera (HippOS on HippOS), and
+  General, Stream, Picture, Controller, EmulationStation, and
   Help and maintenance.
 - On HippOS the language choice reads "Same as HippOS" and follows
   HippOS's own language setting (hippos.conf).

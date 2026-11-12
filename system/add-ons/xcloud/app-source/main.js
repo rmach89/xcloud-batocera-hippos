@@ -609,7 +609,7 @@ function settingsHtml() {
     'on', 'off', 'reloadT', 'reloadHelp', 'reloadBtn', 'save', 'cancel', 'sHint', 'sHintR', 'custom', 'auto',
     'intro', 'introHelp', 'introAlways', 'introDaily', 'introOff', 'signOutT', 'signOutHelp', 'signOutBtn', 'signOutConfirm',
     'winT', 'winHelp', 'version', 'resT', 'resAuto', 'res1080', 'resHq', 'res1440', 'resHelpAuto', 'resHelp1080', 'resHelpHq', 'resHelp1440',
-    'secAcct', 'secGen', 'secStream', 'secPic', 'secPad', 'secBato', 'secHippos', 'secHelp', 'autoH',
+    'secAcct', 'secGen', 'secStream', 'secPic', 'secPad', 'secBato', 'secHelp', 'autoH',
     'gpuT', 'gpuHelp', 'shT', 'shHelp', 'clT', 'clHelp', 'ctT', 'saT', 'brT', 'picHelp', 'shLow', 'shMed', 'shHigh', 'statsT', 'statsHelp', 'vibT', 'vibHelp', 'introSound', 'introSoundHelp', 'muted',
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
@@ -796,7 +796,7 @@ function settingsHtml() {
     <div><div class="label" data-k="vibT"></div><div class="help" data-k="vibHelp"></div></div>
     <div class="picker"><span class="arrow" id="vbdown">&minus;</span><span class="bar" style="width:200px"><i id="vibbar"></i></span><span class="arrow" id="vbup">+</span><span class="pct" id="vibpct" style="min-width:96px"></span></div>
   </div>
-  <div class="sec" data-k="${ON_HIPPOS ? 'secHippos' : 'secBato'}"></div>
+  <div class="sec" data-k="secBato"></div>
   <div class="row" id="row-glist">
     <div><div class="label" data-k="glT"></div><div class="help" id="gl-help"></div></div>
     <div class="picker"><span class="arrow" id="gprev">&#9664;</span><span class="value" id="glist" style="width:260px"></span><span class="arrow" id="gnext">&#9654;</span></div>
