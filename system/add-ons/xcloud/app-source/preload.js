@@ -49,6 +49,7 @@ function setText(i) {
     if (document.documentElement) add(); else document.addEventListener('DOMContentLoaded', add);
   }
 }
+let STREAM_JS = '';   // the stream options (resolution, sharpening, stats, vibration), from the app
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
 try {
   const c = ipcRenderer.sendSync('xcloud-config') || {};
@@ -57,6 +58,7 @@ try {
   PAD_FIX_ON = c.padFix !== false;
   if (Number.isFinite(c.volume)) VOLUME = Math.min(100, Math.max(0, c.volume));
   setText(c.i18n);
+  STREAM_JS = c.stream || '';
 } catch (e) { /* use defaults */ }
 
 const ON_XBOX = /(^|\.)xbox\.com$/i.test(location.hostname);
@@ -92,6 +94,8 @@ const NO_PAD_JS = "(function(){\n  if (window.__xcloudNoPad) return;\n  window._
 if (ON_WEB_PAGE) { try { webFrame.executeJavaScript(NO_PAD_JS); } catch (e) { /* the app adds it on load */ } }
 const PAD_EVENTS_JS = "(function(){\n  if (window.__xcloudPadEvents) return;\n  window.__xcloudPadEvents = 1;\n  // \"controller connected\" messages carry the controller too: the page gets\n  // it the way getGamepads shows it (a Steam controller as an Xbox one).\n  var GP = { gamepadconnected: 1, gamepaddisconnected: 1 };\n  function show(p) { try { return window.__xcloudShowPad ? window.__xcloudShowPad(p) : p; } catch (e) { return p; } }\n  function wrapEvent(e) {\n    // (a stand-in target: the real event's own fields can't be changed through a Proxy of it)\n    return new Proxy(Object.create(Object.getPrototypeOf(e)), { get: function (_, k) {\n      if (k === 'gamepad') return show(e.gamepad);\n      var v = e[k]; return typeof v === 'function' ? v.bind(e) : v;\n    } });\n  }\n  var wrapped = new WeakMap();\n  function wrapperOf(fn, make) {\n    if (!fn || (typeof fn !== 'function' && typeof fn.handleEvent !== 'function')) return fn;\n    var w = wrapped.get(fn);\n    if (!w && make) {\n      w = function (e) { var x = wrapEvent(e); return typeof fn === 'function' ? fn.call(this, x) : fn.handleEvent(x); };\n      wrapped.set(fn, w);\n    }\n    return w || fn;\n  }\n  var add = EventTarget.prototype.addEventListener, rem = EventTarget.prototype.removeEventListener;\n  EventTarget.prototype.addEventListener = function (t, fn) {\n    if (GP[t] && this === window) { var a = Array.prototype.slice.call(arguments); a[1] = wrapperOf(fn, true); return add.apply(this, a); }\n    return add.apply(this, arguments);\n  };\n  EventTarget.prototype.removeEventListener = function (t, fn) {\n    if (GP[t] && this === window) { var a = Array.prototype.slice.call(arguments); a[1] = wrapperOf(fn, false); return rem.apply(this, a); }\n    return rem.apply(this, arguments);\n  };\n  ['ongamepadconnected', 'ongamepaddisconnected'].forEach(function (name) {\n    var h = null, t = name.slice(2);\n    function run(e) { if (h) h.call(window, wrapEvent(e)); }\n    try {\n      Object.defineProperty(window, name, { configurable: true,\n        get: function () { return h; },\n        set: function (f) { if (h) rem.call(window, t, run); h = typeof f === 'function' ? f : null; if (h) add.call(window, t, run); } });\n    } catch (e) { /* left as it is */ }\n  });\n})();";
 if (ON_DASH) { try { webFrame.executeJavaScript(PAD_EVENTS_JS); } catch (e) { /* the app adds it on load */ } }
+// the stream options, before the page's own scripts make their first request
+if (STREAM_JS) { try { webFrame.executeJavaScript(STREAM_JS); } catch (e) { /* the app adds it on load */ } }
 
 // write a line to /userdata/system/logs/xcloud-app.log (for troubleshooting)
 function appLog(msg) { try { ipcRenderer.send('xcloud-log', String(msg)); } catch (e) { /* ignore */ } }

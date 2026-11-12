@@ -58,6 +58,14 @@ const DEFAULTS = {
   intro_volume: 100,         // the intro video's sound, 0-100
   intro_muted: false,        // true = the intro video plays silently
   stream_as_windows: false,  // tell the Xbox site this is a Windows PC (sharper on some setups)
+  stream_resolution: 'auto', // the stream size asked for: 'auto' (720p), '1080p', '1080p-hq' or '1440p'
+  video_sharpen: 'off',      // a sharpening filter on the stream: 'off', 'low', 'medium' or 'high'
+  clarity_boost: false,      // a little more contrast and colour in the stream's picture
+  video_contrast: 100,       // the stream's picture, 50-150% (100 = unchanged)
+  video_saturation: 100,
+  video_brightness: 100,
+  stream_stats: false,       // a small box with the stream's resolution, fps, ping, bitrate...
+  vibration: 100,            // controller vibration strength in games, 0 (off) to 100%
   language: 'auto',          // 'auto' = the same as Batocera
   controller_fix: true,      // put controllers the browser doesn't know (Steam Deck...) in the Xbox layout
   game_list: 'off',          // Batocera's Xbox Cloud list: 'off' (opens the app), 'all' cloud games, or 'picked' ones
@@ -65,6 +73,32 @@ const DEFAULTS = {
   sign_out_on_exit: false,   // sign out of Xbox every time the app closes
   gpu_acceleration: false
 };
+// the stream options' choices (Settings)
+const STREAM_RES = ['auto', '1080p', '1080p-hq', '1440p'];
+const SHARPEN = ['off', 'low', 'medium', 'high'];
+const VIBRATION = [0, 25, 50, 75, 100];
+const PICTURE = ['video_contrast', 'video_saturation', 'video_brightness'];
+// 50-150 in steps of 5; anything else is 100 (unchanged)
+function pictureLevel(v) { const n = Number(v); return Number.isFinite(n) ? Math.round(Math.min(150, Math.max(50, n)) / 5) * 5 : 100; }
+// the script that does them, in the Xbox page (stream.js)
+let STREAM_JS = '';
+try { STREAM_JS = fs.readFileSync(path.join(__dirname, 'stream.js'), 'utf8'); } catch (e) { /* logged at startup */ }
+function streamCfg() {
+  return { res: cfg.stream_resolution, sharpen: SHARPEN.indexOf(cfg.video_sharpen), clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration,
+    contrast: cfg.video_contrast, saturation: cfg.video_saturation, brightness: cfg.video_brightness };
+}
+function streamScript() {
+  return `window.__xcloudStreamCfg = ${JSON.stringify(streamCfg())}; ${STREAM_JS}`;
+}
+// only on Xbox's own play pages (not sign-in or the Store)
+function onXboxPlay(url) { return /^https:\/\/(play|www)\.xbox\.com\//i.test(String(url || '')); }
+function applyStreamOptions(wc) {
+  if (!wc) return;
+  try {
+    if (!onXboxPlay(wc.getURL())) return;
+    wc.executeJavaScript(`${streamScript()} window.__xcloudStreamSet(${JSON.stringify(streamCfg())});`).catch(() => { /* page between loads */ });
+  } catch (e) { /* closed */ }
+}
 // earlier versions' default start page, which now just redirects
 const OLD_DEFAULT_START = /^https:\/\/www\.xbox\.com\/([a-z]{2}-[a-z]{2})\/play\/?$/i;
 
@@ -114,6 +148,13 @@ function loadConfig(profileId) {
   cfg.show_exit_tip = cfg.show_exit_tip !== false;
   cfg.introMode = cfg.play_intro === false ? 'off' : cfg.play_intro === 'daily' ? 'daily' : 'always';
   cfg.stream_as_windows = cfg.stream_as_windows === true;
+  cfg.stream_resolution = STREAM_RES.includes(cfg.stream_resolution) ? cfg.stream_resolution : 'auto';
+  cfg.video_sharpen = SHARPEN.includes(cfg.video_sharpen) ? cfg.video_sharpen : 'off';
+  cfg.stream_stats = cfg.stream_stats === true;
+  cfg.clarity_boost = cfg.clarity_boost === true;
+  for (const k of PICTURE) cfg[k] = pictureLevel(cfg[k]);
+  const vib = Number(cfg.vibration);
+  cfg.vibration = Number.isFinite(vib) ? Math.round(Math.min(100, Math.max(0, vib)) / 25) * 25 : DEFAULTS.vibration;
   const iv = Number(cfg.intro_volume);
   cfg.intro_volume = Number.isFinite(iv) ? Math.round(Math.min(100, Math.max(0, iv))) : DEFAULTS.intro_volume;
   cfg.intro_muted = cfg.intro_muted === true;
@@ -160,11 +201,22 @@ const isAllowed = url => rules.isAllowed(url, allowList);
 // keep this app's sign-in separate from anything else on the system
 app.setPath('userData', path.join(HOME, 'profile'));
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-// optional: ask Chromium to use the GPU even where it normally wouldn't (see config.json)
-if (cfg.gpu_acceleration) {
+// optional (Settings > GPU acceleration): ask Chromium to use the graphics
+// chip even where it normally wouldn't, including decoding the game's video
+// (VA-API). Read once at start, so a change applies the next time the app opens.
+const GPU_AT_START = cfg.gpu_acceleration;
+if (GPU_AT_START) {
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
   app.commandLine.appendSwitch('enable-gpu-rasterization');
   app.commandLine.appendSwitch('enable-zero-copy');
+  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,AcceleratedVideoDecodeLinuxGL');
+}
+// what the graphics chip is doing, for the log (after start)
+function logGpu() {
+  try {
+    const f = app.getGPUFeatureStatus() || {};
+    log(`gpu: acceleration ${GPU_AT_START ? 'on' : 'off'}; engine reports video decode ${f.video_decode || '?'}, compositing ${f.gpu_compositing || '?'}, webgl ${f.webgl || '?'}`);
+  } catch (e) { /* not available */ }
 }
 
 // sites to open connections to early, while the start screen is up
@@ -547,7 +599,8 @@ function settingsHtml() {
   const KEYS = ['settings', 'region', 'regionHelp', 'of', 'language', 'languageHelp', 'volume', 'volumeHelp', 'keys', 'keysHelp',
     'on', 'off', 'reloadT', 'reloadHelp', 'reloadBtn', 'save', 'cancel', 'sHint', 'sHintR', 'custom', 'auto',
     'intro', 'introHelp', 'introAlways', 'introDaily', 'introOff', 'signOutT', 'signOutHelp', 'signOutBtn', 'signOutConfirm',
-    'winT', 'winHelp', 'version', 'introSound', 'introSoundHelp', 'muted',
+    'winT', 'winHelp', 'version', 'resT', 'resAuto', 'res1080', 'resHq', 'res1440', 'resHelpAuto', 'resHelp1080', 'resHelpHq', 'resHelp1440',
+    'gpuT', 'gpuHelp', 'shT', 'shHelp', 'clT', 'clHelp', 'ctT', 'saT', 'brT', 'picHelp', 'shLow', 'shMed', 'shHigh', 'statsT', 'statsHelp', 'vibT', 'vibHelp', 'introSound', 'introSoundHelp', 'muted',
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
     'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b'];
@@ -563,6 +616,8 @@ function settingsHtml() {
     region: currentRegion(), langs: [['auto', '']].concat(i18n.LANGS), choice: cfg.languageChoice,
     detected: batoceraLanguage(), T, version: VERSION,
     volume: cfg.volume, vmute: cfg.muted, soe: cfg.sign_out_on_exit, highlight: cfg.keyboard_highlight, intro: cfg.introMode, windows: cfg.stream_as_windows,
+    res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration,
+    pic: { ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness },
     ivol: cfg.intro_volume, imute: cfg.intro_muted,
     engine: process.versions.electron, appv: VERSION, upd,
     glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun,
@@ -688,6 +743,42 @@ function settingsHtml() {
     <div><div class="label" data-k="winT"></div><div class="help" data-k="winHelp"></div></div>
     <div class="picker"><span class="state" id="windows-state"></span><span class="toggle" id="windows"></span></div>
   </div>
+  <div class="row" id="row-gpu">
+    <div><div class="label" data-k="gpuT"></div><div class="help" data-k="gpuHelp"></div></div>
+    <div class="picker"><span class="state" id="gpu-state"></span><span class="toggle" id="gpu"></span></div>
+  </div>
+  <div class="row" id="row-res">
+    <div><div class="label" data-k="resT"></div><div class="help" id="res-help"></div></div>
+    <div class="picker"><span class="arrow" id="rsprev">&#9664;</span><span class="value" id="res" style="width:220px"></span><span class="arrow" id="rsnext">&#9654;</span></div>
+  </div>
+  <div class="row" id="row-sharpen">
+    <div><div class="label" data-k="shT"></div><div class="help" data-k="shHelp"></div></div>
+    <div class="picker"><span class="arrow" id="shprev">&#9664;</span><span class="value" id="sharpen" style="width:220px"></span><span class="arrow" id="shnext">&#9654;</span></div>
+  </div>
+  <div class="row" id="row-clarity">
+    <div><div class="label" data-k="clT"></div><div class="help" data-k="clHelp"></div></div>
+    <div class="picker"><span class="state" id="clarity-state"></span><span class="toggle" id="clarity"></span></div>
+  </div>
+  <div class="row" id="row-ct">
+    <div><div class="label" data-k="ctT"></div><div class="help" data-k="picHelp"></div></div>
+    <div class="picker"><span class="arrow" id="ctdown">&minus;</span><span class="bar" style="width:200px"><i id="ctbar"></i></span><span class="arrow" id="ctup">+</span><span class="pct" id="ctpct" style="min-width:96px"></span></div>
+  </div>
+  <div class="row" id="row-sa">
+    <div><div class="label" data-k="saT"></div><div class="help" data-k="picHelp"></div></div>
+    <div class="picker"><span class="arrow" id="sadown">&minus;</span><span class="bar" style="width:200px"><i id="sabar"></i></span><span class="arrow" id="saup">+</span><span class="pct" id="sapct" style="min-width:96px"></span></div>
+  </div>
+  <div class="row" id="row-br">
+    <div><div class="label" data-k="brT"></div><div class="help" data-k="picHelp"></div></div>
+    <div class="picker"><span class="arrow" id="brdown">&minus;</span><span class="bar" style="width:200px"><i id="brbar"></i></span><span class="arrow" id="brup">+</span><span class="pct" id="brpct" style="min-width:96px"></span></div>
+  </div>
+  <div class="row" id="row-stats">
+    <div><div class="label" data-k="statsT"></div><div class="help" data-k="statsHelp"></div></div>
+    <div class="picker"><span class="state" id="stats-state"></span><span class="toggle" id="stats"></span></div>
+  </div>
+  <div class="row" id="row-vib">
+    <div><div class="label" data-k="vibT"></div><div class="help" data-k="vibHelp"></div></div>
+    <div class="picker"><span class="arrow" id="vbdown">&minus;</span><span class="bar" style="width:200px"><i id="vibbar"></i></span><span class="arrow" id="vbup">+</span><span class="pct" id="vibpct" style="min-width:96px"></span></div>
+  </div>
   <div class="row" id="row-signout">
     <div><div class="label" data-k="signOutT"></div><div class="help" data-k="signOutHelp"></div></div>
     <span class="chip" id="signout-chip">${ICON_SIGNOUT} <span id="signout"></span></span>
@@ -733,6 +824,9 @@ function settingsHtml() {
   var li = Math.max(0, S.langs.findIndex(function (l) { return l[0] === S.choice; }));
   var INTRO = ['always', 'daily', 'off'], ii = Math.max(0, INTRO.indexOf(S.intro));
   var GL = ['off', 'all', 'picked'], gi = Math.max(0, GL.indexOf(S.glist));
+  // the stream options
+  var RES = ['auto', '1080p', '1080p-hq', '1440p'], rsi = Math.max(0, RES.indexOf(S.res));
+  var SH = ['off', 'low', 'medium', 'high'], shi = Math.max(0, SH.indexOf(S.sharpen));
   // a child's profile doesn't get the rows that look after the whole machine
   // the game list's own rows only show while it's on: "This game in
   // Batocera's list" with Games I pick (on a game's page), 3D game boxes with
@@ -740,7 +834,7 @@ function settingsHtml() {
   var rows = [], LAST = 0;
   function buildRows() {
     rows = ['row-controls'].concat(S.reload ? ['row-user', 'row-reload'] : []).concat(['row-cache'])
-      .concat(['row-region', 'row-language', 'row-volume', 'row-highlight', 'row-intro', 'row-isound', 'row-windows', 'row-signout', 'row-soe'])
+      .concat(['row-region', 'row-language', 'row-volume', 'row-highlight', 'row-intro', 'row-isound', 'row-windows', 'row-gpu', 'row-res', 'row-sharpen', 'row-clarity', 'row-ct', 'row-sa', 'row-br', 'row-stats', 'row-vib', 'row-signout', 'row-soe'])
       .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : [])
       .concat(['row-logs', 'row-update', 'buttons']));
     LAST = rows.length - 1;
@@ -852,6 +946,22 @@ function settingsHtml() {
     $('imute').className = 'toggle mute' + (S.imute ? ' yes' : '');
     $('windows').className = 'toggle' + (S.windows ? ' yes' : '');
     $('windows-state').textContent = S.windows ? tx('on') : tx('off');
+    $('res').textContent = tx({ auto: 'resAuto', '1080p': 'res1080', '1080p-hq': 'resHq', '1440p': 'res1440' }[RES[rsi]]);
+    $('res-help').textContent = tx({ auto: 'resHelpAuto', '1080p': 'resHelp1080', '1080p-hq': 'resHelpHq', '1440p': 'resHelp1440' }[RES[rsi]]);
+    $('sharpen').textContent = tx({ off: 'off', low: 'shLow', medium: 'shMed', high: 'shHigh' }[SH[shi]]);
+    $('clarity').className = 'toggle' + (S.clarity ? ' yes' : '');
+    $('clarity-state').textContent = S.clarity ? tx('on') : tx('off');
+    ['ct', 'sa', 'br'].forEach(function (k) {
+      $(k + 'bar').style.width = S.pic[k] - 50 + '%';
+      $(k + 'pct').textContent = S.pic[k] + '%';
+    });
+    $('gpu').className = 'toggle' + (S.gpu ? ' yes' : '');
+    $('gpu-state').textContent = S.gpu ? tx('on') : tx('off');
+    $('stats').className = 'toggle' + (S.stats ? ' yes' : '');
+    $('stats-state').textContent = S.stats ? tx('on') : tx('off');
+    $('vibbar').style.width = S.vib + '%';
+    $('vibbar').parentNode.className = 'bar' + (S.vib ? '' : ' off');
+    $('vibpct').textContent = S.vib ? S.vib + '%' : tx('off');
     $('signout').textContent = confirming() ? tx('signOutConfirm') : tx('signOutBtn');
     $('signout-chip').className = 'chip' + (confirming() ? ' warn' : '');
     $('hint').textContent = tx('sHint') + (S.reload ? tx('sHintR') : '');
@@ -868,6 +978,7 @@ function settingsHtml() {
   function save() {
     go('settings-save?region=' + encodeURIComponent(regions[ri]) + '&lang=' + encodeURIComponent(S.langs[li][0]) +
        '&volume=' + S.volume + '&highlight=' + (S.highlight ? 1 : 0) + '&intro=' + INTRO[ii] + '&windows=' + (S.windows ? 1 : 0) +
+       '&res=' + RES[rsi] + '&sharpen=' + SH[shi] + '&clarity=' + (S.clarity ? 1 : 0) + '&ct=' + S.pic.ct + '&sa=' + S.pic.sa + '&br=' + S.pic.br + '&gpu=' + (S.gpu ? 1 : 0) + '&stats=' + (S.stats ? 1 : 0) + '&vib=' + S.vib +
        '&ivol=' + S.ivol + '&imute=' + (S.imute ? 1 : 0) + '&vmute=' + (S.vmute ? 1 : 0) + '&soe=' + (S.soe ? 1 : 0) + '&glist=' + GL[gi] + '&g3d=' + (S.g3d ? 1 : 0) +
          (S.game ? '&gid=' + S.game.id + '&gslug=' + encodeURIComponent(S.game.slug) + '&gpick=' + (S.gpicked ? 1 : 0) : ''));
   }
@@ -924,6 +1035,13 @@ function settingsHtml() {
       if (iv !== S.ivol) { S.ivol = iv; S.imute = false; beep(S.ivol); }
     }
     else if (r === 'row-windows') S.windows = !S.windows;
+    else if (r === 'row-res') rsi = (rsi + step + RES.length) % RES.length;
+    else if (r === 'row-sharpen') shi = (shi + step + SH.length) % SH.length;
+    else if (r === 'row-stats') S.stats = !S.stats;
+    else if (r === 'row-gpu') S.gpu = !S.gpu;
+    else if (r === 'row-clarity') S.clarity = !S.clarity;
+    else if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { var pk = r.slice(4); S.pic[pk] = Math.min(150, Math.max(50, S.pic[pk] + step * 5)); }
+    else if (r === 'row-vib') S.vib = Math.min(100, Math.max(0, S.vib + step * 25));
     else if (r === 'buttons') btn = btn === 0 ? 1 : 0;
     else return;
     render();
@@ -940,6 +1058,7 @@ function settingsHtml() {
     if (r === 'row-logs') { saveLogs(); return; }
     if (r === 'row-update') { update(); return; }
     if (r === 'row-isound') { S.imute = !S.imute; render(); return; }   // A / Enter: mute or unmute
+    if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { S.pic[r.slice(4)] = 100; render(); return; }   // A / Enter: back to 100%
     change(1);
   }
   window.addEventListener('keydown', function (e) {
@@ -970,13 +1089,17 @@ function settingsHtml() {
   arrow('iprev', 'row-intro', -1); arrow('inext', 'row-intro', 1);
   arrow('gprev', 'row-glist', -1); arrow('gnext', 'row-glist', 1);
   arrow('idown', 'row-isound', -1); arrow('iup', 'row-isound', 1);
+  arrow('rsprev', 'row-res', -1); arrow('rsnext', 'row-res', 1);
+  arrow('shprev', 'row-sharpen', -1); arrow('shnext', 'row-sharpen', 1);
+  arrow('vbdown', 'row-vib', -1); arrow('vbup', 'row-vib', 1);
+  ['ct', 'sa', 'br'].forEach(function (k) { arrow(k + 'down', 'row-' + k, -1); arrow(k + 'up', 'row-' + k, 1); });
   $('vmute').addEventListener('click', function (e) { e.stopPropagation(); row = rowOf('row-volume'); S.vmute = !S.vmute; render(); if (!S.vmute) beep(); });
   $('imute').addEventListener('click', function (e) { e.stopPropagation(); row = rowOf('row-isound'); S.imute = !S.imute; render(); });
   $('row-isound').addEventListener('click', function () { row = rowOf('row-isound'); render(); });
-  ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist'].forEach(function (id) {
+  ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist', 'row-res', 'row-sharpen', 'row-vib', 'row-ct', 'row-sa', 'row-br'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); render(); });
   });
-  ['row-highlight', 'row-windows', 'row-soe', 'row-gpick', 'row-g3d'].forEach(function (id) {
+  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); change(1); });
   });
   $('row-reload').addEventListener('click', function () { row = rowOf('row-reload'); render(); reload(); });
@@ -1014,7 +1137,7 @@ function leaveSettings(wc) {
 }
 
 // Save the settings screen's choices to config.json, keeping every other setting in it.
-function saveSettings(region, volume, highlight, language, intro, asWindows, introVol, introMute, volMute, signOutOnExit) {
+function saveSettings(region, volume, highlight, language, intro, asWindows, introVol, introMute, volMute, signOutOnExit, stream) {
   let obj = {};
   try {
     obj = JSON.parse(fs.readFileSync(CONFIG, 'utf8'));
@@ -1058,6 +1181,23 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
     cfg.stream_as_windows = asWindows;
     obj.stream_as_windows = asWindows;
   }
+  // the stream options
+  stream = stream || {};
+  if (STREAM_RES.includes(stream.res)) obj.stream_resolution = cfg.stream_resolution = stream.res;
+  if (SHARPEN.includes(stream.sharpen)) obj.video_sharpen = cfg.video_sharpen = stream.sharpen;
+  for (const [k, q] of [['video_contrast', 'ct'], ['video_saturation', 'sa'], ['video_brightness', 'br']]) {
+    if (Number.isFinite(stream[q])) obj[k] = cfg[k] = pictureLevel(stream[q]);
+  }
+  // GPU acceleration belongs to the machine (it's set as the engine starts):
+  // it always goes in config.json, with or without a profile
+  let gpuChanged = false;
+  if (typeof stream.gpu === 'boolean') {
+    gpuChanged = stream.gpu !== cfg.gpu_acceleration;
+    obj.gpu_acceleration = cfg.gpu_acceleration = stream.gpu;
+  }
+  if (typeof stream.clarity === 'boolean') obj.clarity_boost = cfg.clarity_boost = stream.clarity;
+  if (typeof stream.stats === 'boolean') obj.stream_stats = cfg.stream_stats = stream.stats;
+  if (VIBRATION.includes(stream.vib)) obj.vibration = cfg.vibration = stream.vib;
   if (language === 'auto' || (language && i18n.STRINGS[language])) {
     cfg.languageChoice = language;
     cfg.language = language === 'auto' ? batoceraLanguage() : language;
@@ -1069,10 +1209,19 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
       profiles.saveSettings(curProfile.id, {
         start_url: cfg.start_url, language: cfg.languageChoice, volume: cfg.volume, muted: cfg.muted,
         keyboard_highlight: cfg.keyboard_highlight, play_intro: cfg.introMode === 'always' ? true : cfg.introMode === 'daily' ? 'daily' : false,
-        intro_volume: cfg.intro_volume, intro_muted: cfg.intro_muted, stream_as_windows: cfg.stream_as_windows, sign_out_on_exit: cfg.sign_out_on_exit
+        intro_volume: cfg.intro_volume, intro_muted: cfg.intro_muted, stream_as_windows: cfg.stream_as_windows, sign_out_on_exit: cfg.sign_out_on_exit,
+        stream_resolution: cfg.stream_resolution, video_sharpen: cfg.video_sharpen, clarity_boost: cfg.clarity_boost,
+        video_contrast: cfg.video_contrast, video_saturation: cfg.video_saturation, video_brightness: cfg.video_brightness, stream_stats: cfg.stream_stats, vibration: cfg.vibration
       });
+      if (gpuChanged) {
+        let base = {};
+        try { base = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) { /* none or broken: start fresh */ }
+        base.gpu_acceleration = cfg.gpu_acceleration;
+        fs.writeFileSync(CONFIG, JSON.stringify(base, null, 2) + '\n');
+      }
     } else fs.writeFileSync(CONFIG, JSON.stringify(obj, null, 2) + '\n');
-    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
+    if (gpuChanged) log(`GPU acceleration turned ${cfg.gpu_acceleration ? 'on' : 'off'}: it applies the next time the app opens`);
+    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
   } catch (e) {
     log(`could not save settings: ${e.message}`);
   }
@@ -2044,7 +2193,11 @@ function handleAction(wc, url) {
     saveSettings(String(q.get('region') || ''), q.has('volume') ? Number(q.get('volume')) : NaN, q.get('highlight') === '1', String(q.get('lang') || ''),
       String(q.get('intro') || ''), q.has('windows') ? q.get('windows') === '1' : undefined,
       q.has('ivol') ? Number(q.get('ivol')) : NaN, q.has('imute') ? q.get('imute') === '1' : undefined,
-      q.has('vmute') ? q.get('vmute') === '1' : undefined, q.has('soe') ? q.get('soe') === '1' : undefined);
+      q.has('vmute') ? q.get('vmute') === '1' : undefined, q.has('soe') ? q.get('soe') === '1' : undefined,
+      { res: q.get('res'), gpu: q.has('gpu') ? q.get('gpu') === '1' : undefined, sharpen: q.get('sharpen'), clarity: q.has('clarity') ? q.get('clarity') === '1' : undefined,
+        ct: q.has('ct') ? Number(q.get('ct')) : NaN, sa: q.has('sa') ? Number(q.get('sa')) : NaN, br: q.has('br') ? Number(q.get('br')) : NaN, stats: q.has('stats') ? q.get('stats') === '1' : undefined, vib: q.has('vib') ? Number(q.get('vib')) : undefined });
+    // the stream options change on the dashboard straight away (the resolution from the next game)
+    applyStreamOptions(mainWin && mainWin.webContents);
     if (q.has('glist')) saveGameList(q);
     // the new volume (or mute) takes effect straight away
     for (const w of BrowserWindow.getAllWindows ? BrowserWindow.getAllWindows() : []) {
@@ -3040,7 +3193,7 @@ function guard(wc, isLayer) {
       setTimeout(() => grabGamerpic(wc), 20000);
     }
     if (loadStarted && /xbox\.com$/i.test(new URL(wc.getURL()).hostname)) {
-      log(`Xbox page loaded in ${((Date.now() - loadStarted) / 1000).toFixed(1)} s${cfg.gpu_acceleration ? ' (GPU acceleration on)' : ''}`);
+      log(`Xbox page loaded in ${((Date.now() - loadStarted) / 1000).toFixed(1)} s${GPU_AT_START ? ' (GPU acceleration on)' : ''}`);
       loadStarted = 0;
     }
   });
@@ -3078,6 +3231,12 @@ function makeMainWin() {
     if (/^file:/.test(wc.getURL())) return;
     wc.executeJavaScript(`${PAD_GATE} window.__xcloudPadFix = ${cfg.controller_fix !== false};` +
       (overlay ? ' window.__xcloudPadsBlocked = true;' : '')).catch(() => { /* page between loads */ });
+    if (onXboxPlay(wc.getURL())) wc.executeJavaScript(streamScript()).catch(() => { /* page between loads */ });
+  });
+  // the stream options' own notes go to the app's log
+  win.webContents.on('console-message', (e, level, message) => {
+    const m = String((e && e.message) || message || '');
+    if (m.startsWith('[xcloud] ')) log(m.slice(9, 309));
   });
   win.focus();
   win.once('ready-to-show', () => { win.show(); win.focus(); win.webContents.focus(); });
@@ -3155,7 +3314,8 @@ function preloadText() {
 // the volume the Xbox page plays at: 0 when muted in Settings
 function appVolume() { return cfg.muted ? 0 : cfg.volume; }
 ipcMain.on('xcloud-config', event => {
-  event.returnValue = { exitHoldMs: Math.round(cfg.exit_hold_seconds * 1000), keyHighlight: cfg.keyboard_highlight, padFix: cfg.controller_fix !== false, volume: appVolume(), i18n: preloadText() };
+  event.returnValue = { exitHoldMs: Math.round(cfg.exit_hold_seconds * 1000), keyHighlight: cfg.keyboard_highlight, padFix: cfg.controller_fix !== false, volume: appVolume(), i18n: preloadText(),
+    stream: (() => { try { return onXboxPlay(event.sender.getURL()) ? streamScript() : ''; } catch (e) { return ''; } })() };
 });
 // the controller's Menu button on the welcome screen
 ipcMain.on('xcloud-settings', event => openSettings(event.sender, 'welcome'));
@@ -3245,6 +3405,7 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(() => {
+  setTimeout(logGpu, 5000);
   log(`starting Xbox Cloud Gaming ${VERSION} (${batoceraVersion()}, Electron ${process.versions.electron}, Chrome ${process.versions.chrome})`);
   // the version used last time: an update (from Settings > Updates, or a reinstall) is noted once
   try {

@@ -18,7 +18,7 @@ const crypto = require('crypto');
 // the Settings choices that belong to each profile (everything else in
 // config.json is shared by the whole machine)
 const PROFILE_KEYS = ['start_url', 'language', 'volume', 'muted', 'keyboard_highlight', 'play_intro',
-  'intro_volume', 'intro_muted', 'stream_as_windows', 'sign_out_on_exit'];
+  'intro_volume', 'intro_muted', 'stream_as_windows', 'stream_resolution', 'video_sharpen', 'clarity_boost', 'video_contrast', 'video_saturation', 'video_brightness', 'stream_stats', 'vibration', 'sign_out_on_exit'];
 const COLORS = ['#107c10', '#0e6aa8', '#a4262c', '#8764b8', '#ca5010', '#038387', '#c239b3', '#498205'];
 
 function create(home, log) {

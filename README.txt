@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.1.33 (November 2026)
+Version 1.1.34 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -136,6 +136,30 @@ to save, B to cancel. Keyboard: arrows, Enter, S to save, Esc to cancel.
   Stream as a Windows PC     tells Xbox this is a Windows PC; may give a
                              sharper picture on some machines (reloads
                              the dashboard)
+  GPU acceleration           uses the graphics chip more, including for
+                             decoding the game's video. Smoother on many
+                             machines; turn it off if the screen flickers
+                             or goes black. Applies the next time the app
+                             opens, for everyone on this machine
+  Stream resolution          720p (standard, about 10 Mbps internet,
+                             20 recommended) / 1080p (about 20 Mbps) /
+                             1080p high quality (about 30 Mbps) / 1440p
+                             (about 35 Mbps; needs Game Pass Ultimate and
+                             a game that offers it, otherwise Xbox sends
+                             1080p). Wired is best. There's no 4K. Starts
+                             with the next game
+  Sharpening                 off / low / medium / high. Sharpens the
+                             game's picture; uses more processing power,
+                             so lower it if games stutter
+  Clarity boost              a little more contrast and colour, in one
+                             switch (works together with the sliders)
+  Contrast, Colour           fine-tune the game's picture, 50-150%.
+  saturation, Brightness     A / Enter puts a slider back to 100%
+  Stream stats               a small box at the top while you play:
+                             resolution, frame rate, ping, bitrate,
+                             packet loss and decode time
+  Controller vibration       how strong the rumble is in games: off, 25%,
+                             50%, 75% or 100%
   Sign out of Xbox           press twice to sign out
   Sign out when closing      signs out every time the app closes (for a
                              shared machine)
@@ -276,7 +300,7 @@ decode.
   Not supported       Raspberry Pi 1 / Zero (ARMv6) and 32-bit x86 PCs:
                       the installer stops without changing anything
 With less than 2 GB of memory the installer warns you but installs. On
-ARM boards that stutter, try "gpu_acceleration": true in config.json.
+ARM boards that stutter, try Settings > GPU acceleration.
 
 
 config.json
@@ -285,8 +309,6 @@ config.json
 the Settings screen; these are only in the file:
   exit_hold_seconds  how long to hold the exit buttons (default 2)
   show_exit_tip      false: never show the welcome screen at start
-  gpu_acceleration   true: ask the engine to use the graphics chip more
-                     (can help on ARM; turn off if worse)
   return_to_carousel false: stay on the Xbox Cloud list after closing
   controller_fix     false: don't rearrange unknown controllers
   allowed            extra sites the app may open. A "blocked" line in
@@ -337,6 +359,17 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.1.34
+--------------------
+- New stream options in Settings, saved for each profile: Stream
+  resolution (up to 1440p, with the internet speed each needs),
+  Sharpening, Clarity boost, Contrast / Colour saturation / Brightness
+  sliders, Stream stats and Controller vibration strength. They're
+  logged in xcloud-app.log when saved and when a game starts.
+- GPU acceleration is now in Settings (it was only in config.json), and
+  also turns on hardware decoding of the game's video. The log notes
+  what the engine reports for the graphics chip.
 
 What's new in 1.1.33
 --------------------
