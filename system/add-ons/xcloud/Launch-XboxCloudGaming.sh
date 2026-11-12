@@ -10,6 +10,13 @@ LOGDIR=/userdata/system/logs
 mkdir -p "$LOGDIR"
 exec > "$LOGDIR/xcloud.log" 2>&1
 echo "$(date): launching Xbox Cloud Gaming${1:+ ($1)}"
+# an app update from Settings > Updates still being installed (it runs in the
+# background after the app closes): wait for it, up to 3 minutes
+for i in $(seq 1 180); do
+    [ -e /tmp/xcloud-updating ] && kill -0 "$(cat /tmp/xcloud-updating 2>/dev/null)" 2>/dev/null || break
+    [ "$i" = 1 ] && echo "an app update is still being installed: waiting for it"
+    sleep 1
+done
 OS=batocera
 [ -f "${XCLOUD_HIPPOS_VERSION:-/usr/share/hippos/version}" ] && OS=hippos
 
@@ -105,5 +112,13 @@ if [ -f /tmp/xcloud-gamelist-changed ]; then
     rm -f /tmp/xcloud-gamelist-changed
     echo "Batocera's game list changed: reloading EmulationStation's games"
     setsid bash -c "sleep 2; curl -s -m 5 http://127.0.0.1:1234/reloadgames" < /dev/null > /dev/null 2>&1 &
+fi
+# an app update downloaded with Settings > Updates: installed now, in the
+# background (from a copy in /tmp, since it replaces this script too), so
+# EmulationStation comes back straight away; xcloud-update.log has the result
+if [ -f "$FILES/update-staged/ready" ] && [ -f "$FILES/xcloud-apply-update.sh" ]; then
+    cp -f "$FILES/xcloud-apply-update.sh" /tmp/xcloud-apply-update.sh \
+        && setsid bash /tmp/xcloud-apply-update.sh < /dev/null >> "$LOGDIR/xcloud-update.log" 2>&1 &
+    echo "installing the app update downloaded in Settings (see xcloud-update.log)"
 fi
 exit 0

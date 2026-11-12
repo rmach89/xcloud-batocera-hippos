@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.1.31 (November 2026)
+Version 1.1.33 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -62,8 +62,8 @@ internet it installs the version you ran.
 
 It also asks whether to install Launch Single Game (see below).
 
-To update later, run the installer again. Your sign-ins, profiles and
-settings are kept.
+To update later: Settings > Updates (see Settings), or run the installer
+again. Either way your sign-ins, profiles and settings are kept.
 
 Options, set before the command (for example
 XCLOUD_UPDATE=no bash install.sh):
@@ -145,7 +145,15 @@ to save, B to cancel. Keyboard: arrows, Enter, S to save, Esc to cancel.
                              /userdata/xcloud-logs-<date>-<time>.zip
                              (gamertags are replaced; nothing about
                              sign-ins is included)
-  Update engine              checks for a newer browser engine
+  Updates                    shows the app and engine versions. One press
+                             checks GitHub for a newer app (published
+                             Releases only) and Electron for a newer
+                             engine, and gets whatever is newer by itself.
+                             It's used the next time the app opens: a new
+                             app version is installed in the background
+                             when the app closes. Settings, profiles,
+                             sign-ins and picked games are kept. Nothing
+                             changes if it fails; the log says why.
 
 
 Batocera game list
@@ -191,8 +199,9 @@ With two or more profiles, "Who's playing?" appears when the app opens
 Settings > Change user brings it up at any time.
 
 PIN: once a child's or teen's profile exists, adult profiles need a
-4-number PIN. The app asks you to create it, and adult profiles stay
-locked until you do. After that the PIN is needed to:
+4-number PIN. The app asks for it as soon as that profile is set up,
+so create it then. Until it exists, adult profiles stay locked and
+profiles can't be added or removed. After that the PIN is needed to:
 - open an adult's profile;
 - add or remove profiles;
 - use the F1 Settings shortcut in an adult's profile;
@@ -310,6 +319,9 @@ Logs in /userdata/system/logs:
   xcloud-app.log       inside the app (blocked pages, controllers, game
                        list)
   xcloud-boot.log      links made at boot
+  xcloud-update.log    app updates installed from Settings > Updates
+                       (the checks themselves are in xcloud-app.log,
+                       lines starting "updates:")
 Settings > Save logs for help puts them in one zip for sending.
 
 - The app flashes and closes: check xcloud.log.
@@ -326,10 +338,23 @@ Settings > Save logs for help puts them in one zip for sending.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
-What's new in 1.1.31
+What's new in 1.1.33
 --------------------
-- This README is shorter and up to date (what's no longer in the app is
-  gone; the version history is in the Releases on GitHub).
+- Settings > Updates (was Update engine) shows the app version next to
+  the engine's. One press checks your GitHub Releases for a newer app
+  and Electron for a newer engine, and downloads and applies whatever is
+  newer without asking again. The new version is used the next time the
+  app opens; settings, profiles and sign-ins are kept. Every check,
+  download and failure is logged.
+
+What's new in 1.1.32
+--------------------
+- PIN: as soon as a child's or teen's profile is set up, the app asks for
+  the adult PIN right then (while the adult setting it up is there), not
+  later. Until a PIN exists, adding or removing a profile needs one made
+  first, the same as opening an adult's profile.
+- This README is shorter and up to date (the version history is in the
+  Releases on GitHub).
 
 1.1.30: new home on GitHub; the installer checks it for a newer version
 before installing.

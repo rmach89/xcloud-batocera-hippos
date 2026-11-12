@@ -1,7 +1,7 @@
 'use strict';
 // Xbox Cloud Gaming for Batocera: a fullscreen window that only opens
 // xbox.com/play and Microsoft sign-in. Everything else is blocked.
-const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, powerSaveBlocker, nativeImage } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, powerSaveBlocker, nativeImage, net } = require('electron');
 const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -548,7 +548,7 @@ function settingsHtml() {
     'on', 'off', 'reloadT', 'reloadHelp', 'reloadBtn', 'save', 'cancel', 'sHint', 'sHintR', 'custom', 'auto',
     'intro', 'introHelp', 'introAlways', 'introDaily', 'introOff', 'signOutT', 'signOutHelp', 'signOutBtn', 'signOutConfirm',
     'winT', 'winHelp', 'version', 'introSound', 'introSoundHelp', 'muted',
-    'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updAvail', 'updGetting', 'updDone', 'updFail',
+    'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
     'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b'];
   const T = {};
@@ -564,7 +564,7 @@ function settingsHtml() {
     detected: batoceraLanguage(), T, version: VERSION,
     volume: cfg.volume, vmute: cfg.muted, soe: cfg.sign_out_on_exit, highlight: cfg.keyboard_highlight, intro: cfg.introMode, windows: cfg.stream_as_windows,
     ivol: cfg.intro_volume, imute: cfg.intro_muted,
-    engine: process.versions.electron, upd,
+    engine: process.versions.electron, appv: VERSION, upd,
     glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun,
     game: pageGame(), gpicked: !!(pageGame() && pickedGames().some(g => g.id === pageGame().id)),
     reload: !SETTINGS_MODE,  // Reload dashboard only when the dashboard is open (not from the F1 shortcut)
@@ -801,7 +801,6 @@ function settingsHtml() {
     var u = S.upd || { state: 'idle' };
     if (u.state === 'checking') return tx('updChecking');
     if (u.state === 'none') return tx('updNone');
-    if (u.state === 'avail') return tx('updAvail', { e: u.e });
     if (u.state === 'getting') return tx('updGetting', { p: u.p || 0 });
     if (u.state === 'done') return tx('updDone');
     if (u.state === 'fail') return tx('updFail');
@@ -815,11 +814,12 @@ function settingsHtml() {
     $('crumb').textContent = (copen ? 'Xbox Cloud Gaming \u203a ' + tx('settings') : 'Xbox Cloud Gaming') + (S.user ? ' \u00b7 ' + S.user : '');
     $('user-help').textContent = S.user ? tx('profHelp', { name: S.user }) : tx('profHelpNone');
     $('cache').textContent = S.cache === 'busy' ? tx('cacheBusy') : S.cache ? tx('cacheDone', { mb: S.cache }) : tx('cacheBtn');
-    $('upd-help').textContent = tx('updHelp', { e: S.engine });
+    var uv = S.upd && S.upd.state === 'done' ? S.upd : null;
+    $('upd-help').textContent = tx('updHelp', { a: (uv && uv.a) || S.appv, e: (uv && uv.e) || S.engine });
     $('logs').textContent = S.logs === 'busy' ? tx('logsBusy') : S.logs === 'fail' ? tx('logsFail') : S.logs ? '\u2713' : tx('logsBtn');
     $('logs-help').textContent = S.logs && S.logs !== 'busy' && S.logs !== 'fail' ? tx('logsDone', { file: S.logs }) : tx('logsHelp');
     $('upd').textContent = updText();
-    $('upd-chip').className = 'chip' + (S.upd && S.upd.state === 'avail' ? ' go' : '');
+    $('upd-chip').className = 'chip' + (S.upd && (S.upd.state === 'getting' || S.upd.state === 'done') ? ' go' : '');
     document.querySelector('.card').className = 'card' + (copen ? ' copen' : '');
     if (copen) renderControls();
     $('region').textContent = regionName(regions[ri]);
@@ -872,15 +872,14 @@ function settingsHtml() {
          (S.game ? '&gid=' + S.game.id + '&gslug=' + encodeURIComponent(S.game.slug) + '&gpick=' + (S.gpicked ? 1 : 0) : ''));
   }
   function cancel() { go('settings-cancel'); }
-  // Update engine: the first press checks, a second press (when there's
-  // a newer engine) downloads it; it takes over the next time the app opens
+  // Updates: one press checks the app and the engine and gets whatever is
+  // newer by itself; it's used the next time the app opens
   function update() {
     var st = (S.upd || {}).state || 'idle';
-    var path = st === 'avail' ? 'settings-update-install' : (st === 'idle' || st === 'none' || st === 'fail') ? 'settings-update-check' : '';
-    if (!path) return;
-    S.upd = { state: st === 'avail' ? 'getting' : 'checking', p: 0 };
+    if (st !== 'idle' && st !== 'none' && st !== 'fail') return;
+    S.upd = { state: 'checking', p: 0 };
     render();
-    location.href = '${ACTION_PREFIX}' + path;
+    location.href = '${ACTION_PREFIX}settings-update-check';
   }
   window.__updateStatus = function (u) { S.upd = u; render(); };
   // Clear cache: the stored copies of web pages, pictures and scripts (not the sign-in)
@@ -1499,12 +1498,18 @@ function removeProfile(wc, id) {
 // actions from the profile screens; true when handled
 function profileAction(wc, action, q) {
   if (action === 'profile-pick') { pickProfile(wc, profiles.byId(q.get('id'))); return true; }
+  // with a child's or teen's profile here and no PIN yet, adding or removing
+  // a profile needs one made first (like opening an adult's profile)
   if (action === 'profile-add') {
-    if (profiles.hasPin) showPin(wc, { kind: 'add' }); else addProfile(wc);
+    if (profiles.hasPin) showPin(wc, { kind: 'add' });
+    else if (minorsHere()) { log('adding a profile: a child\'s or teen\'s profile is set up and there is no PIN yet: one has to be made first'); showPin(wc, { kind: 'create', next: { kind: 'add' } }); }
+    else addProfile(wc);
     return true;
   }
   if (action === 'profile-remove') {
-    if (profiles.hasPin) showPin(wc, { kind: 'remove', id: q.get('id') }); else removeProfile(wc, q.get('id'));
+    if (profiles.hasPin) showPin(wc, { kind: 'remove', id: q.get('id') });
+    else if (minorsHere()) { log('removing a profile: a child\'s or teen\'s profile is set up and there is no PIN yet: one has to be made first'); showPin(wc, { kind: 'create', next: { kind: 'remove', id: q.get('id') } }); }
+    else removeProfile(wc, q.get('id'));
     return true;
   }
   if (action === 'profiles-back') {
@@ -1542,6 +1547,9 @@ function profileAction(wc, action, q) {
       log('PIN created for adult profiles');
       // made while opening an adult's profile: that profile opens now
       if (pend && pend.then) { unlockedId = pend.then; pickProfile(wc, profiles.byId(pend.then)); return true; }
+      // made while adding or removing a profile: that goes ahead now
+      if (pend && pend.next && pend.next.kind === 'add') { addProfile(wc); return true; }
+      if (pend && pend.next && pend.next.kind === 'remove') { removeProfile(wc, pend.next.id); return true; }
       if (curProfile && !isMinor(curProfile)) unlockedId = curProfile.id;
     }
     closePrompt();
@@ -1553,7 +1561,7 @@ function profileAction(wc, action, q) {
     if (pend && pend.kind === 'settings') { fastExit('PIN not entered'); return true; }
     if (pend && pend.kind === 'create') {
       // a child or teen plays here: the PIN can't be put off
-      if (pend.then) { log('PIN not made: back to "who\'s playing?"'); showPicker(wc, pickerReturn); return true; }
+      if (pend.then || pend.next) { log('PIN not made: back to "who\'s playing?"'); showPicker(wc, pickerReturn); return true; }
       if (minorsHere()) { showPin(wc, pend); return true; }
       closePrompt();
       return true;
@@ -2077,7 +2085,6 @@ function handleAction(wc, url) {
   else if (action === 'settings-clear-cache') clearAppCache(wc);
   else if (action === 'settings-logs') saveSupportLogs(wc);
   else if (action === 'settings-update-check') checkForUpdates();
-  else if (action === 'settings-update-install') installUpdate();
   else if (action === 'quit') fastExit('app screen');
 }
 
@@ -2470,7 +2477,8 @@ function saveSupportLogs(wc) {
     const names = new Map();
     profiles.list.forEach((p, i) => { if (p.name) names.set(p.name, `Profile ${i + 1}`); });
     const logs = { 'xcloud-app.log': readText(LOG), 'xcloud.log': readText(path.join(path.dirname(LOG), 'xcloud.log')),
-      'xcloud-install.log': readText(path.join(path.dirname(LOG), 'xcloud-install.log')) };
+      'xcloud-install.log': readText(path.join(path.dirname(LOG), 'xcloud-install.log')),
+      'xcloud-update.log': readText(path.join(path.dirname(LOG), 'xcloud-update.log')) };
     const NAME_RES = [/signed in: (.+?) \(/g, /gamerpic saved for (.+?) \(/g, /profile: (.+?) \(/g, /first profile: (.+)$/gm,
       /profiles: (?:added|removed) (.+)$/gm, /^\S+ (.+?) has a profile already/gm, /settings saved for (.+?):/g];
     let other = 0;
@@ -2545,10 +2553,23 @@ function checkPadBatteries() {
   }
 }
 
-// ---------- Update engine (the browser engine, Electron) ----------
-// Asks Build-Runtime.py for the newest Electron version; a second press
-// downloads it next to the one in use (checked against Electron's published
-// checksums), and Run-App.sh switches to it the next time the app opens.
+// ---------- Updates: the app (GitHub Releases) and the browser engine ----------
+// One press of Settings > Updates checks both and gets whatever is newer, by
+// itself:
+//  - the app: the newest Release of the app's GitHub repository (only
+//    published Releases, never work in progress). Its zip is downloaded,
+//    unpacked and checked into update-staged/; the next time the app
+//    closes, Launch-XboxCloudGaming.sh runs that version's installer in the
+//    background (xcloud-apply-update.sh), which keeps config.json, the
+//    profiles, sign-ins, PIN and picked games, and also brings the newest
+//    engine. So the new version is the one used the next time it opens.
+//  - the engine (Electron), when only it is newer: Build-Runtime.py --stage
+//    downloads it next to the one in use (checked against Electron's
+//    published checksums); Run-App.sh switches to it the next time.
+// Anything that fails leaves the app as it was; every step is in the log.
+const UPDATE_REPO = process.env.XCLOUD_REPO || 'rmach89/xcloud-batocera-hippos';
+const RELEASES_URL = process.env.XCLOUD_RELEASES_URL || `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+const UPDATE_STAGED = path.join(HOME, 'update-staged');
 let upd = { state: 'idle' };
 function updStatus(st) {
   upd = st;
@@ -2579,36 +2600,146 @@ function runBuild(args, onLine, done) {
   child.on('error', e => done(1, e.message));
   child.on('close', code => { if (buf) onLine(buf); done(code, all); });
 }
-function checkForUpdates() {
-  if (upd.state === 'checking' || upd.state === 'getting') return;
-  const installed = 'v' + process.versions.electron;
-  updStatus({ state: 'checking' });
-  let info = null;
-  runBuild(['--check'], line => { if (/^\s*\{/.test(line)) { try { info = JSON.parse(line); } catch (e) { /* ignore */ } } }, (code, out) => {
-    if (code !== 0 || !info || !info.latest) {
-      log(`update check failed: ${String(out).trim().split('\n').pop() || code}`);
-      updStatus({ state: 'fail' });
-      return;
-    }
-    log(`engine update check: installed ${installed}, newest ${info.latest}${info.staged ? `, downloaded ${info.staged}` : ''}`);
-    if (info.staged && !newer(info.latest, info.staged) && newer(info.staged, installed)) updStatus({ state: 'done' });
-    else if (newer(info.latest, installed)) updStatus({ state: 'avail', e: String(info.latest).replace(/^v/, '') });
-    else updStatus({ state: 'none' });
+function stagedAppVersion() {
+  try { return fs.readFileSync(path.join(UPDATE_STAGED, 'ready'), 'utf8').trim(); } catch (e) { return ''; }
+}
+// the newest Release: { version, zip } (null with a reason when it can't be read)
+function latestRelease() {
+  return new Promise(resolve => {
+    let req;
+    try { req = net.request({ url: RELEASES_URL, method: 'GET' }); } catch (e) { resolve({ error: e.message }); return; }
+    req.setHeader('Accept', 'application/vnd.github+json');
+    req.setHeader('User-Agent', 'xcloud-batocera-hippos/' + VERSION);
+    const timer = setTimeout(() => { try { req.abort(); } catch (e) { /* ignore */ } resolve({ error: 'timed out' }); }, 20000);
+    req.on('response', res => {
+      let body = '';
+      res.on('data', d => { body += d; });
+      res.on('end', () => {
+        clearTimeout(timer);
+        if (res.statusCode !== 200) { resolve({ error: res.statusCode === 404 ? 'no release published yet (HTTP 404)' : `HTTP ${res.statusCode}` }); return; }
+        try {
+          const r = JSON.parse(body);
+          const version = String(r.tag_name || '').replace(/^[vV]/, '');
+          const asset = (r.assets || []).find(a => /\.zip$/i.test(String(a.name || '')));
+          if (!version || !asset) { resolve({ error: 'the newest release has no version tag or no zip' }); return; }
+          resolve({ version, zip: asset.browser_download_url });
+        } catch (e) { resolve({ error: 'GitHub\'s answer couldn\'t be read' }); }
+      });
+    });
+    req.on('error', e => { clearTimeout(timer); resolve({ error: e.message }); });
+    req.end();
   });
 }
-function installUpdate() {
-  if (upd.state !== 'avail') return;
-  log(`downloading browser engine ${upd.e}`);
-  updStatus({ state: 'getting', p: 0 });
-  let staged = false;
-  runBuild(['--stage'], line => {
-    const m = line.match(/^\s*(\d+)%/);
-    if (m) updStatus({ state: 'getting', p: Number(m[1]) });
-    if (/^STAGED /.test(line)) staged = true;
-  }, (code, out) => {
-    if (code === 0 && staged) { log('browser engine downloaded; it will be used the next time the app opens'); updStatus({ state: 'done' }); }
-    else { log(`browser engine download failed: ${String(out).trim().split('\n').pop() || code}`); updStatus({ state: 'fail' }); }
+// download a file, with progress (0-100)
+function download(url, dest, onPct) {
+  return new Promise((resolve, reject) => {
+    let req, out, got = 0, total = 0, last = -1;
+    try { req = net.request({ url, method: 'GET', redirect: 'follow' }); } catch (e) { reject(e); return; }
+    req.setHeader('User-Agent', 'xcloud-batocera-hippos/' + VERSION);
+    req.on('response', res => {
+      if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
+      total = Number(res.headers['content-length']) || 0;
+      try { out = fs.createWriteStream(dest); } catch (e) { reject(e); return; }
+      res.on('data', d => {
+        out.write(d); got += d.length;
+        const pct = total ? Math.floor(got * 100 / total) : 0;
+        if (pct !== last) { last = pct; onPct(pct); }
+      });
+      res.on('end', () => out.end(() => (total && got < total ? reject(new Error(`cut off at ${Math.floor(got * 100 / total)}%`)) : resolve(got))));
+      res.on('error', e => { try { out.end(); } catch (x) { /* ignore */ } reject(e); });
+    });
+    req.on('error', reject);
+    req.end();
   });
+}
+function unzip(zip, dir) {
+  const { execFileSync } = require('child_process');
+  execFileSync('python3', ['-I', '-c', 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])', zip, dir], { timeout: 120000 });
+}
+// download, unpack and check the newest app; ready for the next close
+async function stageApp(rel, onPct) {
+  const work = UPDATE_STAGED + '.new';
+  fs.rmSync(work, { recursive: true, force: true });
+  fs.mkdirSync(work, { recursive: true });
+  const zip = path.join(work, 'update.zip');
+  try {
+    await download(rel.zip, zip, onPct);
+  } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw new Error(`app download failed (${e.message})`); }
+  try { unzip(zip, path.join(work, 'pkg')); } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw new Error('the zip couldn\'t be unpacked'); }
+  fs.rmSync(zip, { force: true });
+  // the package: install.sh next to system/add-ons/xcloud with the app in it, of the version the release says
+  const find = (dir, depth) => {
+    if (fs.existsSync(path.join(dir, 'install.sh'))) return dir;
+    if (depth <= 0) return '';
+    for (const n of fs.readdirSync(dir)) { const d = path.join(dir, n); if (fs.statSync(d).isDirectory()) { const f = find(d, depth - 1); if (f) return f; } }
+    return '';
+  };
+  const root = find(path.join(work, 'pkg'), 2);
+  let pv = '';
+  try { pv = JSON.parse(fs.readFileSync(path.join(root, 'system/add-ons/xcloud/app-source/package.json'), 'utf8')).version; } catch (e) { pv = ''; }
+  if (!root || !fs.existsSync(path.join(root, 'system/add-ons/xcloud/app.asar')) || pv !== rel.version) {
+    fs.rmSync(work, { recursive: true, force: true });
+    throw new Error(`the zip didn't look right (${!root ? 'no install.sh' : pv !== rel.version ? `it holds v${pv || '?'}, not v${rel.version}` : 'no app.asar'})`);
+  }
+  fs.writeFileSync(path.join(work, 'ready'), rel.version + '\n');
+  fs.rmSync(UPDATE_STAGED, { recursive: true, force: true });
+  fs.renameSync(work, UPDATE_STAGED);
+}
+function stageEngine(onPct) {
+  return new Promise((resolve, reject) => {
+    let staged = false;
+    runBuild(['--stage'], line => {
+      const m = line.match(/^\s*(\d+)%/);
+      if (m) onPct(Number(m[1]));
+      if (/^STAGED /.test(line)) staged = true;
+    }, (code, out) => (code === 0 && staged ? resolve() : reject(new Error(`engine download failed (${String(out).trim().split('\n').pop() || code})`))));
+  });
+}
+function engineCheck() {
+  return new Promise(resolve => {
+    let info = null;
+    runBuild(['--check'], line => { if (/^\s*\{/.test(line)) { try { info = JSON.parse(line); } catch (e) { /* ignore */ } } },
+      (code, out) => resolve(code === 0 && info && info.latest ? info : { error: String(out).trim().split('\n').pop() || `exit ${code}` }));
+  });
+}
+async function checkForUpdates() {
+  if (upd.state === 'checking' || upd.state === 'getting') return;
+  const engine = 'v' + process.versions.electron;
+  updStatus({ state: 'checking' });
+  log(`updates: checking (app v${VERSION} on GitHub ${UPDATE_REPO}, engine ${engine} on Electron)`);
+  const [rel, eng] = await Promise.all([latestRelease(), engineCheck()]);
+  if (rel.error) log(`updates: couldn't reach GitHub (${rel.error})`);
+  if (eng.error) log(`updates: couldn't check the engine (${eng.error})`);
+  if (rel.error && eng.error) { log('updates: nothing changed'); updStatus({ state: 'fail' }); return; }
+  const staged = stagedAppVersion();
+  const appNew = !rel.error && newer(rel.version, VERSION) && !(staged && !newer(rel.version, staged)) ? rel : null;
+  const engStaged = !eng.error && eng.staged && !newer(eng.latest, eng.staged) && newer(eng.staged, engine);
+  const engNew = !eng.error && newer(eng.latest, engine) && !engStaged;
+  if (!rel.error) log(`updates: app: this is v${VERSION}, newest v${rel.version}${staged ? `, v${staged} already downloaded` : ''}`);
+  if (!eng.error) log(`updates: engine: this is ${engine}, newest ${eng.latest}${eng.staged ? `, ${eng.staged} already downloaded` : ''}`);
+  if (!appNew && !engNew) {
+    if ((staged && newer(staged, VERSION)) || engStaged) { log('updates: already downloaded; used the next time the app opens'); updStatus({ state: 'done', a: staged || VERSION, e: String(engStaged ? eng.staged : engine).replace(/^v/, '') }); return; }
+    log('updates: up to date');
+    updStatus({ state: rel.error || eng.error ? 'fail' : 'none' });
+    return;
+  }
+  updStatus({ state: 'getting', p: 0 });
+  try {
+    if (appNew) {
+      // the new app's installer brings the newest engine too
+      log(`updates: app v${rel.version} found, downloading...`);
+      await stageApp(rel, p => updStatus({ state: 'getting', p }));
+      log(`updates: app v${rel.version} downloaded; it's installed when the app closes and used the next time it opens (settings, profiles and sign-ins are kept)`);
+    } else {
+      log(`updates: engine ${eng.latest} found, downloading...`);
+      await stageEngine(p => updStatus({ state: 'getting', p }));
+      log(`updates: engine ${eng.latest} downloaded; used the next time the app opens`);
+    }
+    updStatus({ state: 'done', a: appNew ? rel.version : VERSION, e: String(appNew ? process.versions.electron : eng.latest).replace(/^v/, '') });
+  } catch (e) {
+    log(`updates: ${e.message}: nothing changed`);
+    updStatus({ state: 'fail' });
+  }
 }
 
 // ---------- who is signed in (children mode and profiles) ----------
@@ -2658,9 +2789,12 @@ function afterIdentity() {
   // a child or teen plays here now: whoever just signed in may be leaving
   // an adult's profile open
   if (isMinor(curProfile)) unlockedId = '';
-  if (profiles.active && !pinAsked && curProfile && curProfile.age && pinMissing(curProfile)) {
+  // asked as soon as a child's or teen's profile is set up (also on that
+  // profile's first sign-in), while the adult setting it up is usually
+  // still there, rather than later when a child could get to it first
+  if (profiles.active && !pinAsked && curProfile && curProfile.age && minorsHere() && !profiles.hasPin) {
     pinAsked = true;
-    log("a child's or teen's profile plays here and adult profiles have no PIN: asking for one");
+    log("a child's or teen's profile is set up and adult profiles have no PIN: asking for one now");
     queuePrompt({ kind: 'pinsetup' });
   }
 }
@@ -3112,6 +3246,14 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   log(`starting Xbox Cloud Gaming ${VERSION} (${batoceraVersion()}, Electron ${process.versions.electron}, Chrome ${process.versions.chrome})`);
+  // the version used last time: an update (from Settings > Updates, or a reinstall) is noted once
+  try {
+    const lastFile = path.join(HOME, 'last-version');
+    let before = '';
+    try { before = fs.readFileSync(lastFile, 'utf8').trim(); } catch (e) { /* first run */ }
+    if (before && before !== VERSION) log(`updates: the app was updated from v${before} to v${VERSION}`);
+    if (before !== VERSION) fs.writeFileSync(lastFile, VERSION + '\n');
+  } catch (e) { /* ignore */ }
   // keep the screen awake: playing with only a controller doesn't count as
   // activity for the screen blanking, which watches the keyboard and mouse
   try { powerSaveBlocker.start('prevent-display-sleep'); } catch (e) { /* ignore */ }

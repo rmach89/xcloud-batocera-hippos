@@ -47,7 +47,7 @@ fi
 
 # make sure the package files were copied over
 missing=""
-for f in xcloud.png xcloud-hippos.png xcloud-hippos-logo.sh xcloud-icon.png xcloud-uninstall-icon.png xcloud-settings-icon.png xcloud1.png es_systems_xcloud.cfg gamelist.xml Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json app.asar launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
+for f in xcloud.png xcloud-hippos.png xcloud-hippos-logo.sh xcloud-apply-update.sh xcloud-icon.png xcloud-uninstall-icon.png xcloud-settings-icon.png xcloud1.png es_systems_xcloud.cfg gamelist.xml Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json app.asar launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
     [ -s "$FILES/$f" ] || missing="$missing $f"
 done
 if [ -n "$missing" ]; then
@@ -59,10 +59,10 @@ fi
 mkdir -p "$ES" "$ROMS/images" || { echo "Install failed: could not create folders."; exit 1; }
 
 # strip any Windows line endings picked up while copying, then set permissions
-for f in es_systems_xcloud.cfg gamelist.xml xcloud-hippos-logo.sh Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
+for f in es_systems_xcloud.cfg gamelist.xml xcloud-hippos-logo.sh xcloud-apply-update.sh Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
     tr -d '\r' < "$FILES/$f" > "$FILES/$f.tmp" && mv "$FILES/$f.tmp" "$FILES/$f"
 done
-chmod +x "$FILES/xcloud-service.sh" "$FILES/xcloud-hippos-logo.sh" "$FILES/Launch-XboxCloudGaming.sh" "$FILES/Run-App.sh" "$FILES/Return-To-Carousel.py" "$FILES/uninstall.sh" "$FILES/Uninstall-From-Menu.sh" "$FILES/Build-Runtime.py" "$FILES/Sync-GameList.py"
+chmod +x "$FILES/xcloud-service.sh" "$FILES/xcloud-hippos-logo.sh" "$FILES/xcloud-apply-update.sh" "$FILES/Launch-XboxCloudGaming.sh" "$FILES/Run-App.sh" "$FILES/Return-To-Carousel.py" "$FILES/uninstall.sh" "$FILES/Uninstall-From-Menu.sh" "$FILES/Build-Runtime.py" "$FILES/Sync-GameList.py"
 
 # --- Launch Single Game (optional: install.sh asks; XCLOUD_SINGLE_LAUNCH=yes/no) ---
 # Two EmulationStation event scripts: when you pick a system that holds

@@ -148,7 +148,7 @@ else
     rm -f "$ES/es_systems_xcloud.cfg"
     rm -f "$USERDATA/roms/xcloud/Xbox Cloud Gaming.xcloud" "$USERDATA/roms/xcloud/gamelist.xml" "$USERDATA/roms/xcloud/images/xcloud.png"
     rmdir "$USERDATA/roms/xcloud/images" "$USERDATA/roms/xcloud" 2>/dev/null
-    rm -rf "$FILES/runtime" "$FILES/runtime.old" "$FILES/runtime.next"
+    rm -rf "$FILES/runtime" "$FILES/runtime.old" "$FILES/runtime.next" "$FILES/update-staged" "$FILES/update-staged.new"
     rm -f "$USERDATA/system/.local/share/applications/xcloud-xbox-cloud-gaming.desktop" \
           "$USERDATA/system/.local/share/applications/xcloud-uninstall.desktop" \
           "$USERDATA/system/.local/share/applications/xcloud-settings.desktop" \
@@ -211,7 +211,7 @@ if [ -d "$FILES" ]; then
         # config.json, picked-games.json and the small "seen it" files)
         ( cd "$FILES" 2>/dev/null && rm -rf app.asar app-source lib launchsingle runtime runtime.old runtime.next runtime.new \
             electron-* theme-backups ./*.sh ./*.py es_systems_xcloud.cfg gamelist.xml xcloud.png xcloud1.png \
-            xcloud-icon.png xcloud-settings-icon.png xcloud-uninstall-icon.png xcloud-hippos.png xcloud-hippos-logo.sh hippos-theme-files.txt xcloud-background.jpg xcloud-intro.mp4 xcloud-intro.webm xcloud-intro-frames.webp xcloud-intro-audio.ogg \
+            xcloud-icon.png xcloud-settings-icon.png xcloud-uninstall-icon.png xcloud-hippos.png xcloud-hippos-logo.sh hippos-theme-files.txt xcloud-apply-update.sh last-version xcloud-background.jpg xcloud-intro.mp4 xcloud-intro.webm xcloud-intro-frames.webp xcloud-intro-audio.ogg \
             README.txt added-to-list theme-installed.txt )
         if [ "$keep" = 2 ]; then
             # everyone's sign-in and profile go: the browser storage, the
