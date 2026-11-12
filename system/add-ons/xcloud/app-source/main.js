@@ -3262,8 +3262,10 @@ function makeMainWin() {
     if (onXboxPlay(wc.getURL())) wc.executeJavaScript(streamScript()).catch(() => { /* page between loads */ });
   });
   // the stream options' own notes go to the app's log
-  win.webContents.on('console-message', (e, level, message) => {
-    const m = String((e && e.message) || message || '');
+  // (one parameter: newer engines warn when the old message arguments are asked for;
+  // older engines only have them, hence arguments[2])
+  win.webContents.on('console-message', function (e) {
+    const m = String(e && typeof e.message === 'string' ? e.message : arguments[2] || '');
     if (m.startsWith('[xcloud] ')) log(m.slice(9, 309));
   });
   win.focus();
