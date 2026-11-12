@@ -133,10 +133,10 @@ tr -d '\r' < "$FILES/Install-XboxCloudGaming.sh" > "$FILES/Install-XboxCloudGami
 # Asked here; XCLOUD_SINGLE_LAUNCH=yes or =no answers it ahead of time.
 SINGLE="${XCLOUD_SINGLE_LAUNCH:-}"
 if [ -z "$SINGLE" ]; then
-    # On HippOS no system opens a game by itself, so it's off unless you
-    # ask for it; on Batocera it's on unless you say no
-    SINGLE=yes
-    [ "$OS" = hippos ] && SINGLE=no
+    # optional on both systems: off unless you ask for it. Installing again
+    # keeps what you chose before (xcloud already in launchsingle.systems).
+    SINGLE=no
+    tr -d '\r' 2>/dev/null < "$USERDATA/system/launchsingle.systems" | grep -qx '[[:space:]]*xcloud[[:space:]]*' && SINGLE=yes
     if [ -t 0 ]; then
         cat <<'SINGLE_EOF'
 
@@ -147,11 +147,11 @@ if [ -z "$SINGLE" ]; then
  in the carousel that holds exactly one game, it starts that game for you
  instead of showing a list with one entry in it.
 
- With it (Yes; recommended on Batocera):
+ With it (Yes):
    - Pick Xbox Cloud Gaming in the carousel: the app opens straight away.
    - Close the app: you're back on the carousel.
 
- Without it (No; recommended on HippOS, where no other system does this):
+ Without it (No):
    - Pick Xbox Cloud Gaming in the carousel: you see its list, with one
      entry, "Xbox Cloud Gaming". Press A on it to open the app.
    - Close the app: you're back on that list (B goes to the carousel).
@@ -164,16 +164,18 @@ if [ -z "$SINGLE" ]; then
    - With Settings > Batocera game list turned on, the Xbox Cloud list
      holds your cloud games, so single launch is switched off for it
      automatically while the list is on, whichever you choose here.
+   - It's entirely up to you; Xbox Cloud Gaming works the same either
+     way. Pressing Enter keeps what you have now (No on a first install).
    - Changed your mind? Run this installer again and answer the other
      way. Your sign-ins and settings are kept.
 ------------------------------------------------------------------------
 SINGLE_EOF
-        if [ "$OS" = hippos ]; then
+        if [ "$SINGLE" = yes ]; then
+            read -r -p "Keep Launch Single Game? [Y/n] " a
+            case "$a" in n|N|no|NO) SINGLE=no ;; esac
+        else
             read -r -p "Install Launch Single Game? [y/N] " a
             case "$a" in y|Y|yes|YES) SINGLE=yes ;; esac
-        else
-            read -r -p "Install Launch Single Game? [Y/n] " a
-            case "$a" in n|N|no|NO) SINGLE=no ;; esac
         fi
     fi
 fi

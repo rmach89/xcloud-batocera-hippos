@@ -274,7 +274,8 @@ Launch Single Game
 Optional; the installer asks. With it, picking Xbox Cloud Gaming in the
 carousel opens the app straight away, and closing the app returns to the
 carousel. Without it, the carousel opens Xbox Cloud Gaming's list like
-any other system. On HippOS it's off unless you choose it.
+any other system. It's off unless you choose it, on Batocera and
+HippOS alike; installing again keeps what you chose before.
 
 It only acts on systems listed in /userdata/system/launchsingle.systems
 (one per line; the installer adds xcloud). Add another system's short
@@ -384,6 +385,9 @@ What's new in 1.2.0
   Sharpening, Clarity boost, Contrast / Colour saturation / Brightness
   sliders, Stream stats and Controller vibration strength. They're
   logged in xcloud-app.log when saved and when a game starts.
+- Launch Single Game is now simply optional: the installer no longer
+  recommends it on either system, and it's off unless you choose it.
+  Installing again keeps your earlier choice.
 - The Settings screen is organised into sections: Profile and account,
   General, Stream, Picture, Controller, Batocera (HippOS on HippOS), and
   Help and maintenance.
