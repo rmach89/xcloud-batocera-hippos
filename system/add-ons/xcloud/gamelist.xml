@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<gameList>
+  <game>
+    <path>./Xbox Cloud Gaming.xcloud</path>
+    <name> Xbox Cloud Gaming</name>
+    <sortname>!Xbox Cloud Gaming</sortname>
+    <desc>Stream hundreds of Xbox games straight from the cloud: no downloads, no console needed. Sign in with your Microsoft account and play the Xbox Game Pass Ultimate cloud library, plus games you own that support cloud play, with your controller. Needs an internet connection (20 Mbps or faster recommended) and a Game Pass membership that includes cloud gaming.
+
+Hold View + Menu for 2 seconds to exit. Hold Menu for 1 second while playing for the welcome screen and Settings.
+
+Unofficial app for Batocera; not made by or affiliated with Microsoft.</desc>
+    <image>./images/xcloud.png</image>
+    <thumbnail>./images/xcloud.png</thumbnail>
+    <rating>1</rating>
+    <releasedate>20200915T000000</releasedate>
+    <developer>Microsoft</developer>
+    <publisher>Microsoft</publisher>
+    <genre>Cloud Gaming</genre>
+    <players>1-4</players>
+    <lang>en</lang>
+  </game>
+</gameList>

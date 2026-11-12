@@ -1,0 +1,8 @@
+{
+  "name": "xcloud-app",
+  "productName": "Xbox Cloud Gaming",
+  "version": "1.1.30",
+  "description": "Locked-down Xbox Cloud Gaming player for Batocera",
+  "main": "main.js",
+  "license": "MIT"
+}
