@@ -222,6 +222,11 @@ Settings.
 game's name on the spine and its age rating in the corner. Detailed
 views show the whole box; grid views crop it.
 
+Badges: games Microsoft lists as playable with a keyboard and mouse get
+a keyboard-and-mouse badge in the bottom-left corner of their cover, and
+games that support touch get a hand tapping. They're on the 3D boxes,
+and on the flat box art when 3D game boxes are off.
+
 Age ratings are information only. What a child's or teen's account may
 play or buy is set by Microsoft's own family settings for that account.
 Kid-friendly games are marked for EmulationStation's Kid mode.
@@ -397,6 +402,8 @@ What's new in 1.2.0
   listed first, their pictures follow, and it finishes in the
   background, then has EmulationStation reload its games. Progress is in
   xcloud-app.log. A bar shows how far it has got, as a percentage.
+- Keyboard-and-mouse and touch badges on the covers of the games that
+  support them, from Microsoft's own lists.
 - Launch Single Game is now simply optional: the installer no longer
   recommends it on either system, and it's off unless you choose it.
   Installing again keeps your earlier choice.

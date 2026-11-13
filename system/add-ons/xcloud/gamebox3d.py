@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 GREEN = (16, 124, 16)
 LIME = (64, 190, 40)
-VERSION = 6   # bump to redraw every box after a design change (6: the age-rating tile)
+VERSION = 7   # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges)
 
 
 def _font(size):
@@ -117,7 +117,102 @@ def _tile(face, rating, art_box):
     d.text((cx, ry + gap + 17), bottom, font=fb, fill=(250, 248, 240), anchor="mm")
 
 
-def _front(cover, logo, W=640, H=960, rating=None):
+# ---------- what the game can be played with (bottom left of the cover) ----------
+# "mkb": keyboard and mouse, "touch": a touch screen (Microsoft's own lists of
+# cloud games that support them). Dark tiles with a white edge, like the rating.
+FEATURES = ("mkb", "touch")
+
+
+def _icon_mkb(s):
+    """A keyboard with a mouse beside it, white on transparent, s x s."""
+    k = 4; S = s * k
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    W = (255, 255, 255, 255)
+    # keyboard
+    kx0, ky0, kx1, ky1 = 0.04 * S, 0.30 * S, 0.66 * S, 0.74 * S
+    d.rounded_rectangle([kx0, ky0, kx1, ky1], radius=0.06 * S, outline=W, width=int(0.055 * S))
+    cols, rows = 5, 2
+    kw = (kx1 - kx0 - 0.16 * S) / cols
+    for r in range(rows):
+        for c in range(cols):
+            x = kx0 + 0.08 * S + c * kw; y = ky0 + 0.10 * S + r * 0.10 * S
+            d.rounded_rectangle([x + 0.012 * S, y, x + kw - 0.012 * S, y + 0.06 * S], radius=0.012 * S, fill=W)
+    d.rounded_rectangle([kx0 + 0.16 * S, ky1 - 0.13 * S, kx1 - 0.16 * S, ky1 - 0.07 * S], radius=0.012 * S, fill=W)
+    # mouse
+    mx0, my0, mx1, my1 = 0.72 * S, 0.30 * S, 0.96 * S, 0.74 * S
+    d.rounded_rectangle([mx0, my0, mx1, my1], radius=0.12 * S, outline=W, width=int(0.055 * S))
+    cx = (mx0 + mx1) / 2
+    d.line([(cx, my0 + 0.02 * S), (cx, my0 + 0.17 * S)], fill=W, width=int(0.045 * S))
+    d.line([(mx0 + 0.02 * S, my0 + 0.17 * S), (mx1 - 0.02 * S, my0 + 0.17 * S)], fill=W, width=int(0.045 * S))
+    return im.resize((s, s), Image.Resampling.LANCZOS)
+
+def _icon_touch(s):
+    """A hand with its finger tapping (rings around the fingertip), white on transparent."""
+    k = 4; S = s * k
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    W = (255, 255, 255, 255)
+    fx = 0.46 * S; ft = 0.22 * S    # fingertip
+    # tap rings
+    for r, w in ((0.13, 0.04), (0.21, 0.035)):
+        d.arc([fx - r * S, ft - r * S, fx + r * S, ft + r * S], 200, 340, fill=W, width=int(w * S))
+    # index finger
+    fw = 0.13 * S
+    d.rounded_rectangle([fx - fw / 2, ft, fx + fw / 2, 0.66 * S], radius=fw / 2, fill=W)
+    # folded fingers (three knuckles to the right)
+    for i, (x, top) in enumerate(((0.585, 0.47), (0.70, 0.50), (0.81, 0.55))):
+        d.rounded_rectangle([x * S - 0.055 * S, top * S, x * S + 0.055 * S, 0.72 * S], radius=0.055 * S, fill=W)
+    # palm
+    d.rounded_rectangle([0.39 * S, 0.55 * S, 0.87 * S, 0.96 * S], radius=0.16 * S, fill=W)
+    # thumb, angled in from the left
+    th = Image.new("RGBA", (S, S), (0, 0, 0, 0)); td = ImageDraw.Draw(th)
+    td.rounded_rectangle([0.20 * S, 0.60 * S, 0.50 * S, 0.71 * S], radius=0.055 * S, fill=W)
+    th = th.rotate(-35, center=(0.47 * S, 0.70 * S), resample=Image.Resampling.BICUBIC)
+    im.alpha_composite(th)
+    # the gaps between the fingers, cut back out so they read as fingers
+    cut = Image.new("L", (S, S), 0); cd = ImageDraw.Draw(cut)
+    for x in (0.528, 0.643, 0.756):
+        cd.line([(x * S, 0.50 * S), (x * S, 0.69 * S)], fill=255, width=int(0.018 * S))
+    a = im.getchannel("A"); a.paste(0, (0, 0), cut); im.putalpha(a)
+    return im.resize((s, s), Image.Resampling.LANCZOS)
+
+
+ICONS = {"mkb": _icon_mkb, "touch": _icon_touch}
+
+
+def badges(face, features, art_box, size=112, gap=14, margin=22):
+    """The control badges in the bottom-left corner of art_box on face (in place)."""
+    feats = [f for f in FEATURES if f in (features or ())]
+    if not feats:
+        return
+    d = ImageDraw.Draw(face)
+    y1 = art_box[3] - margin
+    y0 = y1 - size
+    x = art_box[0] + margin
+    sh = Image.new("L", face.size, 0)
+    for _ in feats:
+        ImageDraw.Draw(sh).rounded_rectangle([x + 3, y0 + 6, x + size + 3, y1 + 6], radius=18, fill=120)
+        x += size + gap
+    face.paste((0, 0, 0), (0, 0), sh.filter(ImageFilter.GaussianBlur(8)))
+    x = art_box[0] + margin
+    for f in feats:
+        d.rounded_rectangle([x - 5, y0 - 5, x + size + 5, y1 + 5], radius=22, fill="white")
+        d.rounded_rectangle([x, y0, x + size, y1], radius=17, fill=(22, 22, 22))
+        ic = ICONS[f](int(size * 0.8))
+        face.paste(ic, (x + (size - ic.width) // 2, y0 + (size - ic.height) // 2), ic)
+        x += size + gap
+
+
+def flat(cover, features, width=480):
+    """The flat box art with the control badges, for the list when 3D boxes are off."""
+    img = cover.convert("RGB")
+    if img.width != width:
+        img = img.resize((width, round(img.height * width / img.width)), Image.Resampling.LANCZOS)
+    k = width / 640
+    badges(img, features, (0, 0, img.width, img.height), size=round(112 * k), gap=round(14 * k), margin=round(22 * k))
+    return img
+
+
+def _front(cover, logo, W=640, H=960, rating=None, features=None):
     face = Image.new("RGB", (W, H), (6, 6, 6))
     head, edge = 86, 11
     d = ImageDraw.Draw(face)
@@ -136,6 +231,7 @@ def _front(cover, logo, W=640, H=960, rating=None):
     art = ImageOps.fit(cover.convert("RGB"), (W - 2 * edge, H - head - 5 - edge), Image.Resampling.LANCZOS)
     face.paste(art, (edge, head + 5))
     _tile(face, rating, (edge, head + 5, edge + art.width, head + 5 + art.height))
+    badges(face, features, (edge, head + 5, edge + art.width, head + 5 + art.height))
     return _round(face, 16)
 
 
@@ -164,8 +260,9 @@ def _spine(title, logo, W=58, H=960):
     return _round(sp, 10)
 
 
-def make(cover, title, logo, out_w=500, rating=None):
-    """rating: (age, label) from Sync-GameList.py, e.g. (13, "ESRB T"); None = no tile."""
+def make(cover, title, logo, out_w=500, rating=None, features=None):
+    """rating: (age, label) from Sync-GameList.py, e.g. (13, "ESRB T"); None = no tile.
+    features: what the game can be played with besides a controller ("mkb", "touch")."""
     S = 2
     CW, CH = 620 * S, 910 * S
     canvas = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
@@ -177,7 +274,7 @@ def make(cover, title, logo, out_w=500, rating=None):
     sh = sh.filter(ImageFilter.GaussianBlur(10 * S))
     canvas.paste((0, 0, 0, 255), (0, 0), sh)
     canvas.alpha_composite(_warp(_spine(title, logo), spine_q, (CW, CH)))
-    canvas.alpha_composite(_warp(_front(cover, logo, rating=rating), front_q, (CW, CH)))
+    canvas.alpha_composite(_warp(_front(cover, logo, rating=rating, features=features), front_q, (CW, CH)))
     # a soft gloss across the cover, and light catching the case edges
     gloss = Image.new("L", (CW, CH), 0)
     ImageDraw.Draw(gloss).polygon([(sx1, 10 * S), (sx1 + 260 * S, 22 * S), (sx1 + 40 * S, 896 * S), (sx1, 898 * S)], fill=30)

@@ -50,6 +50,9 @@ SIGLS = os.environ.get("XCLOUD_CATALOG_URL", "https://catalog.gamepass.com/sigls
 PRODUCTS = os.environ.get("XCLOUD_PRODUCTS_URL", "https://displaycatalog.mp.microsoft.com/v7.0/products")
 # Microsoft's list of every game that streams in Xbox Cloud Gaming
 CLOUD_LIST = "29a81209-df6f-41fd-a528-2ae6b91f719c"
+# Microsoft's lists of the cloud games that can be played with a keyboard and
+# mouse, and with a touch screen: shown as badges on the games' covers
+FEATURE_LISTS = {"mkb": "8fa264dd-124f-4af3-97e8-596fcdf4b486", "touch": "9c86f07a-f3e8-45ad-82a0-a1f759597059"}
 DASHBOARD = "./Xbox Cloud Gaming.xcloud"
 UA = "xcloud-app-gamelist/1.0"
 ID_RE = re.compile(r"^[0-9A-Z]{12}$")
@@ -169,7 +172,24 @@ def market_of(code):
 
 # ---------- which games ----------
 def cloud_ids(lang, market):
-    sigl = read_json(CONFIG, {}).get("game_list_catalog") or CLOUD_LIST
+    return sigl_ids(read_json(CONFIG, {}).get("game_list_catalog") or CLOUD_LIST, lang, market)
+
+
+def features_of(lang, market):
+    """{id: ["mkb", "touch"]}: which games Microsoft lists as playable with a
+    keyboard and mouse, or with touch. None if the lists couldn't be read."""
+    out = {}
+    try:
+        for name, sigl in FEATURE_LISTS.items():
+            for i in sigl_ids(sigl, lang, market):
+                out.setdefault(i, []).append(name)
+    except Exception as e:
+        emit(warning=f"couldn't read which games support keyboard and mouse or touch ({e}); the badges stay as they were")
+        return None
+    return out
+
+
+def sigl_ids(sigl, lang, market):
     q = urllib.parse.urlencode({"id": sigl, "language": lang, "market": market})
     data = json.loads(get(f"{SIGLS}?{q}").decode("utf-8"))
     ids = []
@@ -410,7 +430,7 @@ def remove_ours(state, keep_ids=()):
     return gone
 
 
-BOX_VERSION = 6   # gamebox3d.VERSION, for when Pillow isn't here
+BOX_VERSION = 7   # gamebox3d.VERSION, for when Pillow isn't here
 
 
 def cover_of(pid, d, got):
@@ -434,16 +454,18 @@ def make_boxes(info, got, state):
         for pid, d in info.items():
             art, url = cover_of(pid, d, got)
             box = os.path.join(IMAGES, f"{pid}-box3d.png")
-            if os.path.exists(box) and state.get("box3d_version") == BOX_VERSION:
+            same = state.get("box_features", {}).get(pid, []) == d.get("features", [])
+            if os.path.exists(box) and state.get("box3d_version") == BOX_VERSION and same:
                 out[pid] = box
             elif art or url:
                 if os.path.exists(box):
                     out[pid] = box   # kept until the app has drawn the new one
                 need.append({"id": pid, "title": d["title"], "cover": art or "", "url": url, "out": box,
-                             "age": d.get("age"), "label": d.get("label") or ""})
+                             "age": d.get("age"), "label": d.get("label") or "", "features": d.get("features") or []})
         if need:
             emit(warning=f"no Pillow here ({e}): the app draws the 3D game boxes", need_boxes=need)
         state["box3d_version"] = BOX_VERSION
+        state["box_features"] = {pid: d.get("features") or [] for pid, d in info.items()}
         return out
     # (a cover cut short isn't drawn half-empty: it's fetched again below)
     if shutil.disk_usage(ROMS).free // (1024 * 1024) < 200:
@@ -458,7 +480,8 @@ def make_boxes(info, got, state):
     for pid, d in info.items():
         art, url = cover_of(pid, d, got)
         if art:
-            jobs.append((pid, d["title"], art, os.path.join(IMAGES, f"{pid}-box3d.png"), url, (d.get("age"), d.get("label") or "")))
+            jobs.append((pid, d["title"], art, os.path.join(IMAGES, f"{pid}-box3d.png"), url, (d.get("age"), d.get("label") or ""), d.get("features") or []))
+    drawn_with = state.setdefault("box_features", {})
 
     failed = []
 
@@ -480,14 +503,15 @@ def make_boxes(info, got, state):
         return im
 
     def one(job):
-        pid, title, flat, out, url, rating = job
-        if os.path.exists(out) and not redo:
+        pid, title, flat, out, url, rating, feats = job
+        if os.path.exists(out) and not redo and drawn_with.get(pid, []) == feats:
             return pid, out
         try:
-            img = gamebox3d.make(cover(flat, url), title, logo, rating=rating)
+            img = gamebox3d.make(cover(flat, url), title, logo, rating=rating, features=feats)
             tmp = out + ".tmp.png"
             img.save(tmp, optimize=True)
             os.replace(tmp, out)
+            drawn_with[pid] = feats
             return pid, out
         except Exception as e:
             # Pillow couldn't read this cover. A box the app drew for it is kept
@@ -495,7 +519,7 @@ def make_boxes(info, got, state):
             if os.path.exists(out) and not redo:
                 return pid, out
             emit(warning=f"3D box for {title}: {e}; the app draws it instead")
-            miss = {"id": pid, "title": title, "cover": flat, "url": url, "out": out, "age": rating[0], "label": rating[1]}
+            miss = {"id": pid, "title": title, "cover": flat, "url": url, "out": out, "age": rating[0], "label": rating[1], "features": feats}
             if os.path.exists(out):
                 failed.append(miss)
                 return pid, out   # the old one stays until the app has drawn the new one
@@ -515,7 +539,40 @@ def make_boxes(info, got, state):
     return out
 
 
-def list_games(info, got, boxes, state):
+
+def make_flats(info, got, state):
+    """{id: the flat box art with keyboard-and-mouse / touch badges} (3D boxes off).
+    Games without either keep Microsoft's picture as it is; without Pillow, all do."""
+    try:
+        import gamebox3d
+        from PIL import Image
+    except Exception:
+        return {}
+    done = state.setdefault("cover_features", {})
+    out = {}
+    for pid, d in info.items():
+        feats = d.get("features") or []
+        src = got.get(os.path.join(IMAGES, f"{pid}-image"))
+        if not feats or not src:
+            continue
+        dst = os.path.join(IMAGES, f"{pid}-cover.jpg")
+        if os.path.exists(dst) and done.get(pid) == feats and done.get("_v") == gamebox3d.VERSION:
+            out[pid] = dst
+            continue
+        try:
+            img = gamebox3d.flat(Image.open(src), feats)
+            tmp = dst + ".tmp.jpg"
+            img.save(tmp, quality=90)
+            os.replace(tmp, dst)
+            done[pid] = feats
+            out[pid] = dst
+        except Exception as e:
+            emit(warning=f"badges for {d['title']}: {e}")
+    done["_v"] = gamebox3d.VERSION
+    return out
+
+
+def list_games(info, got, boxes, state, covers=None):
     """The games' entries in gamelist.xml (and their small files), with the pictures in got / boxes."""
     # the games no longer listed go (only ones this script made)
     gone = set(remove_ours(state, keep_ids=set(info)))
@@ -551,7 +608,9 @@ def list_games(info, got, boxes, state):
                 pics[kind] = "./images/" + os.path.basename(p)
         if boxes.get(pid):
             pics["box3d"] = "./images/" + os.path.basename(boxes[pid])
-        sub(g, "image", pics.get("box3d") or pics.get("image"))
+        if (covers or {}).get(pid):
+            pics["cover"] = "./images/" + os.path.basename(covers[pid])
+        sub(g, "image", pics.get("box3d") or pics.get("cover") or pics.get("image"))
         sub(g, "thumbnail", pics.get("image"))
         sub(g, "marquee", pics.get("marquee"))
         sub(g, "fanart", pics.get("fanart"))
@@ -572,7 +631,8 @@ def list_games(info, got, boxes, state):
         sub(g, "kidgame", "true" if d["kid"] and not adult else "false" if adult or d["age"] is not None else None)
         poster = got.get(os.path.join(IMAGES, f"{pid}-poster"))
         state["games"][pid] = {"file": rel, "title": d["title"], "images": list(pics.values()) + (["./images/" + os.path.basename(poster)] if poster else []),
-                               "age": d["age"], "rating_label": d["label"], "adult": adult}
+                               "age": d["age"], "rating_label": d["label"], "adult": adult,
+                               "features": d.get("features") or []}
     write_gamelist(root)
 
 
@@ -606,6 +666,13 @@ def main():
     info = details(ids, lang, market)
     if ids and not info:
         raise RuntimeError("Microsoft's store catalog didn't answer")
+    # keyboard and mouse / touch badges (last time's when the lists can't be read)
+    feats = features_of(lang, market)
+    for pid, d in info.items():
+        if feats is None:
+            d["features"] = list(state.get("games", {}).get(pid, {}).get("features") or [])
+        else:
+            d["features"] = [f for f in FEATURE_LISTS if f in feats.get(pid, [])]
 
     # the games straight away, with the pictures already here (a big list's
     # pictures take minutes; this way the list is there even if that's cut short)
@@ -622,7 +689,9 @@ def main():
     want3d_now = bool(read_json(CONFIG, {}).get("game_list_3d", False))
     old_boxes = {pid: os.path.join(IMAGES, f"{pid}-box3d.png") for pid in info
                  if want3d_now and os.path.exists(os.path.join(IMAGES, f"{pid}-box3d.png"))}
-    list_games(info, now, old_boxes, state)
+    old_covers = {pid: os.path.join(IMAGES, f"{pid}-cover.jpg") for pid in info
+                  if not want3d_now and info[pid].get("features") and os.path.exists(os.path.join(IMAGES, f"{pid}-cover.jpg"))}
+    list_games(info, now, old_boxes, state, old_covers)
     set_launchsingle(False, state)
     state.update(mode=mode, count=len(info), market=lang)
     write_atomic(STATE, json.dumps(state, indent=2) + "\n")
@@ -652,12 +721,15 @@ def main():
 
     # 3D cases, drawn from the tall cover (or the box art) (Settings > 3D game boxes)
     boxes = make_boxes(info, got, state) if want3d else {}
+    # the flat box art with the badges, for games with keyboard and mouse or touch
+    covers = make_flats(info, got, state) if not want3d else {}
 
-    list_games(info, got, boxes, state)
+    list_games(info, got, boxes, state, covers)
 
     # 3D cases no longer used (turned off, or the game left the list)
     for f in os.listdir(IMAGES):
-        if (f.endswith("-box3d.png") and f[:12] not in boxes) or ("-poster." in f and (not want3d or f[:12] not in info)):
+        if (f.endswith("-box3d.png") and f[:12] not in boxes) or ("-poster." in f and (not want3d or f[:12] not in info)) \
+                or (f.endswith("-cover.jpg") and f[:12] not in covers):
             try:
                 os.remove(os.path.join(IMAGES, f))
             except OSError:

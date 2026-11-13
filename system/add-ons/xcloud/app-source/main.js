@@ -2394,7 +2394,15 @@ function boxTile(age, label) {
   const [, color, rule] = tiers.find(t => age <= t[0]) || [0, '#791F1F', '#F7C1C1'];
   return { top, bottom, color, rule };
 }
-function boxHtml(coverUrl, logoUrl, title, altUrl, rating) {
+// the keyboard-and-mouse and touch badges (bottom left of the cover), drawn by gamebox3d.py
+function badgeImgs(features) {
+  return (features || []).filter(f => f === 'mkb' || f === 'touch').map(f => {
+    let b64 = '';
+    try { b64 = fs.readFileSync(path.join(HOME, `badge-${f}.png`)).toString('base64'); } catch (e) { return ''; }
+    return `<div class="badge"><img alt="" src="data:image/png;base64,${b64}"></div>`;
+  }).join('');
+}
+function boxHtml(coverUrl, logoUrl, title, altUrl, rating, features) {
   const tile = rating ? boxTile(rating.age, rating.label) : null;
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -2414,6 +2422,9 @@ function boxHtml(coverUrl, logoUrl, title, altUrl, rating) {
   .tile i{display:block;height:3px;margin:10px 0}
   .tile span{display:block;font-size:28px;font-weight:700;color:#faf8f0}
   .tile span.long{font-size:21px}
+  .badges{position:absolute;left:19px;bottom:29px;display:flex;gap:12px}
+  .badge{width:92px;height:92px;box-sizing:border-box;border-radius:15px;border:4px solid #fff;background:#161616;display:flex;align-items:center;justify-content:center;box-shadow:3px 6px 14px rgba(0,0,0,.45)}
+  .badge img{width:70px;height:70px}
   .spine{position:absolute;left:-52px;top:0;width:52px;height:840px;border-radius:9px;overflow:hidden;transform-origin:100% 50%;transform:rotateY(-90deg);background:linear-gradient(90deg,#040404,#1a1a1a 45%,#050505)}
   .spine img{position:absolute;left:9px;top:20px;width:34px;height:34px;object-fit:contain}
   .spine .t{position:absolute;left:0;right:0;top:84px;bottom:24px;writing-mode:vertical-rl;color:#fff;font-weight:700;font-size:24px;letter-spacing:7px;line-height:52px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2421,7 +2432,7 @@ function boxHtml(coverUrl, logoUrl, title, altUrl, rating) {
 <div class="scene"><div class="box">
   <div class="spine" id="spine"><img id="lg2" alt=""><div class="t">${esc(title)}</div></div>
   <div class="front" id="front"><div class="head"><img id="lg1" alt=""><span>XBOX CLOUD GAMING</span></div>
-    <div class="line"></div><img id="art" alt="">${tile ? `<div class="tile" style="background:${tile.color}"><b>${esc(tile.top)}</b><i style="background:${tile.rule}"></i><span${tile.bottom.length > 4 ? ' class="long"' : ''}>${esc(tile.bottom)}</span></div>` : ''}<div class="gloss"></div></div>
+    <div class="line"></div><img id="art" alt="">${tile ? `<div class="tile" style="background:${tile.color}"><b>${esc(tile.top)}</b><i style="background:${tile.rule}"></i><span${tile.bottom.length > 4 ? ' class="long"' : ''}>${esc(tile.bottom)}</span></div>` : ''}${features && features.length ? `<div class="badges">${badgeImgs(features)}</div>` : ''}<div class="gloss"></div></div>
 </div></div>
 <script>
 // ready once the pictures are in (the cover from the saved file, or Microsoft's
@@ -2460,7 +2471,7 @@ async function drawBoxes(list) {
       try {
         if (!g || !(g.cover || g.url) || !g.out || !/^[0-9A-Z]{12}-box3d\.png$/.test(path.basename(g.out))) continue;
         const alt = /^https:\/\/[a-z0-9.-]*s-microsoft\.com\//i.test(String(g.url || '')) ? String(g.url) : '';
-        fs.writeFileSync(page, boxHtml(g.cover ? pathToFileURL(g.cover).href : '', logo, String(g.title || ''), alt, { age: g.age, label: g.label }));
+        fs.writeFileSync(page, boxHtml(g.cover ? pathToFileURL(g.cover).href : '', logo, String(g.title || ''), alt, { age: g.age, label: g.label }, g.features));
         await wc.loadFile(page);
         const r = await Promise.race([wc.executeJavaScript('window.__ready'), new Promise((res, rej) => setTimeout(() => rej(new Error('timed out')), 8000))]);
         if (!r.cover) throw new Error("the cover picture couldn't be read (the saved file or Microsoft's copy); the flat box art stays");
