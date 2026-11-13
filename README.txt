@@ -414,8 +414,9 @@ What's new in 1.2.0
 - 3D game boxes are drawn for every game again on systems whose picture
   library can't read Microsoft's covers ("broken data stream" in the
   log): those covers are converted with ffmpeg first.
-- 3D boxes keep the top of a cover rather than centring it, so a banner
-  across the top of an old retail cover (XBOX 360) isn't cut in half.
+- A cover with a banner across its top (XBOX 360, XBOX ONE, "Digital
+  version" on old retail covers) is shifted down on its 3D box so the
+  banner isn't cut in half. Other covers stay centred as before.
 - Turning the game list Off now deletes every picture it downloaded
   (also ones from an update that was cut short) and leaves only Xbox
   Cloud Gaming itself in the list.

@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 GREEN = (16, 124, 16)
 LIME = (64, 190, 40)
-VERSION = 8   # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 8: cover kept near its top)
+VERSION = 9   # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 9: covers with a banner kept at their top)
 
 
 def _font(size):
@@ -212,6 +212,34 @@ def flat(cover, features, width=480):
     return img
 
 
+def top_banner(img):
+    """True when a cover starts with a banner across its top: a strip at most a
+    sixth of its height, mostly one colour, ending in a straight line across the
+    whole width (the XBOX 360 band, "Digital version"...)."""
+    w, h = 120, 180
+    im = img.convert("RGB").resize((w, h), Image.Resampling.BILINEAR)
+    px = im.load()
+    def diff(a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2])
+    for y in range(int(h * 0.04), int(h * 0.17)):
+        # the line under the band: nearly every column changes sharply here,
+        # and stays changed a couple of rows down (not a thin rule in the art)
+        cut = sum(1 for x in range(w) if diff(px[x, y - 1], px[x, y]) > 60 or diff(px[x, y - 1], px[x, min(h - 1, y + 2)]) > 90)
+        if cut < w * 0.75:
+            continue
+        # the band above it: one colour covers most of it
+        bins = {}
+        for yy in range(0, y - 1):
+            for x in range(w):
+                c = px[x, yy]
+                k = (c[0] // 32, c[1] // 32, c[2] // 32)
+                bins[k] = bins.get(k, 0) + 1
+        top = max(bins.values()) if bins else 0
+        if top >= 0.45 * w * max(1, y - 1):
+            return True
+    return False
+
+
 def _front(cover, logo, W=640, H=960, rating=None, features=None):
     face = Image.new("RGB", (W, H), (6, 6, 6))
     head, edge = 86, 11
@@ -228,9 +256,12 @@ def _front(cover, logo, W=640, H=960, rating=None, features=None):
         d.line([(0, head - i), (W, head - i)], fill=tuple(int(c1 * (1 - a * 0.5) + c2 * a * 0.5) for c1, c2 in zip(d.im.getpixel((5, head - i))[:3], LIME)))
     d.rectangle([0, head, W, head + 5], fill=GREEN)
     d.line([(0, head), (W, head)], fill=(120, 230, 90), width=2)
-    # a cover taller than the box loses a little of its bottom rather than its top,
-    # so a banner across the top of a retail cover (XBOX 360...) isn't cut in half
-    art = ImageOps.fit(cover.convert("RGB"), (W - 2 * edge, H - head - 5 - edge), Image.Resampling.LANCZOS, centering=(0.5, 0.1))
+    # a cover taller than the box is trimmed evenly top and bottom; one with a
+    # banner across its top (an old retail cover's XBOX 360...) loses only its
+    # bottom instead, so the banner isn't cut in half
+    rgb = cover.convert("RGB")
+    art = ImageOps.fit(rgb, (W - 2 * edge, H - head - 5 - edge), Image.Resampling.LANCZOS,
+                       centering=(0.5, 0.0) if top_banner(rgb) else (0.5, 0.5))
     face.paste(art, (edge, head + 5))
     _tile(face, rating, (edge, head + 5, edge + art.width, head + 5 + art.height))
     badges(face, features, (edge, head + 5, edge + art.width, head + 5 + art.height))

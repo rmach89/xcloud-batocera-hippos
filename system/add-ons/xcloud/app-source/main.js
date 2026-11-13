@@ -2415,7 +2415,7 @@ function boxHtml(coverUrl, logoUrl, title, altUrl, rating, features) {
   .head img{width:54px;height:54px;object-fit:contain}
   .head span{color:#fff;font-weight:700;font-size:27px;letter-spacing:.5px;white-space:nowrap}
   .line{position:absolute;left:0;right:0;top:76px;height:5px;background:#107c10;box-shadow:0 0 14px 4px rgba(64,190,40,.55),inset 0 2px 0 rgba(120,230,90,.9)}
-  #art{position:absolute;left:10px;top:81px;width:540px;height:749px;object-fit:cover;object-position:50% 10%;background:#000}
+  #art{position:absolute;left:10px;top:81px;width:540px;height:749px;object-fit:cover;background:#000}
   .gloss{position:absolute;inset:0;background:linear-gradient(100deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,0) 45%);pointer-events:none}
   .tile{position:absolute;right:19px;bottom:29px;min-width:91px;box-sizing:border-box;padding:12px 14px 11px;border-radius:15px;border:4px solid #fff;color:#fff;text-align:center;line-height:1;box-shadow:3px 6px 14px rgba(0,0,0,.45)}
   .tile b{display:block;font-size:40px;font-weight:700}
