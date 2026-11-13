@@ -415,8 +415,9 @@ What's new in 1.2.0
   library can't read Microsoft's covers ("broken data stream" in the
   log): those covers are converted with ffmpeg first.
 - A cover with a banner across its top (XBOX, XBOX 360, XBOX ONE,
-  "Digital version", "Game Preview") is shifted down on its 3D box so the
-  banner isn't cut in half. Other covers stay centred as before.
+  "Digital version", "Game Preview", a black REMASTERED strip) is
+  shifted down on its 3D box so the banner isn't cut in half. Other
+  covers stay centred as before.
 - Turning the game list Off now deletes every picture it downloaded
   (also ones from an update that was cut short) and leaves only Xbox
   Cloud Gaming itself in the list.

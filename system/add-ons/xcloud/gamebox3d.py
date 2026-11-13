@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 GREEN = (16, 124, 16)
 LIME = (64, 190, 40)
-VERSION = 10  # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 10: covers with a banner kept at their top)
+VERSION = 11  # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 11: covers with a banner kept at their top)
 
 
 def _font(size):
@@ -225,7 +225,14 @@ def top_banner(img):
     for y in range(int(h * 0.04), int(h * 0.17)):
         # the line under the band: nearly every column changes sharply here,
         # and stays changed a couple of rows down (not a thin rule in the art)
-        cut = sum(1 for x in range(w) if diff(px[x, y - 1], px[x, y]) > 60 or diff(px[x, y - 1], px[x, min(h - 1, y + 2)]) > 90)
+        # (under a pure black strip, a step to dark grey counts too: the black
+        # REMASTERED band on dark artwork)
+        def step(x):
+            a, b, c = px[x, y - 1], px[x, y], px[x, min(h - 1, y + 2)]
+            if diff(a, b) > 60 or diff(a, c) > 90:
+                return True
+            return sum(a) < 24 and diff(a, c) > 28 and diff(a, px[x, min(h - 1, y + 4)]) > 28
+        cut = sum(1 for x in range(w) if step(x))
         if cut < w * 0.75:
             continue
         # the band above it: one colour covers most of it
