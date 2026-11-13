@@ -12,11 +12,11 @@ includes cloud gaming.
 
 Contents
 --------
-  What you get            Settings              Keeping it after a reboot
-  What you need           Batocera game list    Compatibility
-  Install and update      Profiles and PIN      config.json
-  Using it                Controllers           Uninstall
-                          Launch Single Game    Troubleshooting
+  What you get        Settings                    Keeping it after a reboot
+  What you need       EmulationStation game list  Compatibility
+  Install and update  Profiles and PIN            config.json
+  Using it            Controllers                 Uninstall
+                      Launch Single Game          Troubleshooting
 
 
 What you get
@@ -29,11 +29,12 @@ What you get
 - The app works entirely with a controller, including an on-screen
   keyboard for signing in and searching.
 - Profiles, so each person has their own Xbox sign-in and settings.
-- Optional: your cloud games in Batocera's own game list, with 3D boxes.
+- Optional: your cloud games in EmulationStation's own game list, with
+  3D boxes.
 - Three shortcuts in F1 > Applications: Xbox Cloud Gaming, Xbox Cloud
   Gaming Settings, and Xbox Cloud Gaming Uninstaller.
-- The app's screens in 18 languages; by default it follows Batocera's
-  language.
+- The app's screens in 18 languages; by default it follows the system's
+  language (Batocera's or HippOS's).
 
 
 What you need
@@ -112,7 +113,7 @@ Cloud Gaming" bar sits at the top. Press View / Select, the Home key, or
 click it. On those pages the D-pad moves, A selects and B goes back.
 
 On-screen messages tell you when the controller disconnects or comes
-back, and when its battery is low (15% and 5%, where Batocera can read
+back, and when its battery is low (15% and 5%, where the system can read
 it).
 
 
@@ -197,10 +198,10 @@ The rows are grouped in sections:
                              changes if it fails; the log says why.
 
 
-Batocera game list
-------------------
+EmulationStation game list
+--------------------------
 Settings > Batocera game list puts the cloud games themselves in
-Batocera's Xbox Cloud list. Each game comes with art, description,
+EmulationStation's Xbox Cloud list. Each game comes with art, description,
 developer, release date and age rating from Microsoft's catalog.
 Picking one opens the app straight into that game. Xbox Cloud Gaming
 itself stays at the top of the list.
@@ -209,11 +210,11 @@ itself stays at the top of the list.
   Games I pick      only the ones you add. On a game's page press F8, or
                     hold LB + RB + LT + RT (L1 + R1 + L2 + R2) for a
                     second. Do it again to take the game out.
-Changes show when you're back in Batocera. All cloud games takes a few
-minutes the first time (hundreds of pictures, and the 3D boxes): the
-games show first and their pictures follow. You can close the app
-meanwhile; it finishes in the background and Batocera reloads its games
-when it's done (xcloud-app.log says when).
+Changes show when you're back in EmulationStation. All cloud games takes
+a few minutes the first time (hundreds of pictures, and the 3D boxes):
+the games show first and their pictures follow. You can close the app
+meanwhile; it finishes in the background and EmulationStation reloads
+its games when it's done (xcloud-app.log says when).
 
 3D game boxes: each game becomes a black case with the cover, the
 game's name on the spine and its age rating in the corner. Detailed
@@ -221,7 +222,7 @@ views show the whole box; grid views crop it.
 
 Age ratings are information only. What a child's or teen's account may
 play or buy is set by Microsoft's own family settings for that account.
-Kid-friendly games are marked for Batocera's Kid mode.
+Kid-friendly games are marked for EmulationStation's Kid mode.
 
 Free-to-play games with ads: the app presses "Play with ads" for you.
 
@@ -236,7 +237,7 @@ settings. The first person to sign in becomes the first profile. When
 someone else signs in, the app offers to set up profiles.
 
 With two or more profiles, "Who's playing?" appears when the app opens
-(and before a game from Batocera's list starts). The controls:
+(and before a game from EmulationStation's list starts). The controls:
   Left / right   pick a profile
   A              choose it
   Y twice        remove a profile

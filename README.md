@@ -10,11 +10,11 @@ An unofficial add-on that puts **Xbox Cloud Gaming** in the EmulationStation car
 - **A fullscreen app** that only goes to Microsoft's own sites (Xbox, Microsoft sign-in, the Microsoft Store and your account). Every other link, popup or download is blocked.
 - **Full controller control:** an on-screen keyboard for sign-in and search, and a number pad for codes.
 - **Profiles:** each person gets their own Xbox sign-in. A PIN keeps children's and teens' profiles out of adults' accounts.
-- **Your games in Batocera's list (optional):** all cloud games, or only the ones you pick. Each comes with art, description and age rating, and can have a 3D game box. Picking one opens straight into it.
+- **Your games in EmulationStation's list (optional):** all cloud games, or only the ones you pick. Each comes with art, description and age rating, and can have a 3D game box. Picking one opens straight into it.
 - **Launch Single Game (optional):** picking Xbox Cloud Gaming in the carousel opens the app straight away.
 - **Settings in sections** (profile, general, stream, picture, controller, game list, help).
 - **Stream options in Settings:** resolution up to 1440p (with the internet speed each needs), sharpening, Clarity boost, contrast / colour / brightness, a stream stats box, controller vibration strength and GPU acceleration.
-- **Translations:** the app's own screens in 18 languages, following Batocera's language.
+- **Translations:** the app's own screens in 18 languages, following the system's language.
 
 ## What you need
 
@@ -47,7 +47,7 @@ Run the installer again. It **checks this repository for a newer release** first
 |---|---|---|---|
 | Exit back to EmulationStation | hold View + Menu (2 s) | hold Share/Create + Options | hold Esc |
 | Welcome screen and Settings | hold Menu (1 s) | hold Options | — |
-| Add or remove the current game in Batocera's list | hold LB + RB + LT + RT | hold L1 + R1 + L2 + R2 | F8 |
+| Add or remove the current game in EmulationStation's list | hold LB + RB + LT + RT | hold L1 + R1 + L2 + R2 | F8 |
 | Settings on the dashboard | — | — | Backspace |
 
 The app's own screens name your controller's buttons: ✕ ○ □ △ on PlayStation, A B X Y on Xbox.
