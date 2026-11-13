@@ -2452,9 +2452,21 @@ function runGameList(mode, why, tell) {
   log(`Batocera game list: updating to "${mode}" (${why})`);
   let out = '';
   try {
-    glRun = spawn('python3', [SYNC_GAMELIST, mode, '--market', regionCode()], { env: Object.assign({}, process.env, { XCLOUD_HOME: HOME }), stdio: ['ignore', 'pipe', 'pipe'], detached: SETTINGS_MODE });
+    // its own process group, so it carries on (and finishes the list) if the
+    // app is closed before it's done; it then writes to the app's log itself
+    glRun = spawn('python3', [SYNC_GAMELIST, mode, '--market', regionCode()], { env: Object.assign({}, process.env, { XCLOUD_HOME: HOME, XCLOUD_APP_LOG: LOG }), stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   } catch (e) { glRun = null; log(`Batocera game list: ${e.message}`); if (tell) mainToast('glFail'); return; }
-  glRun.stdout.on('data', d => { out += d; });
+  let seen = 0;
+  glRun.stdout.on('data', d => {
+    out += d;
+    // as it goes: the games listed (pictures still coming), or waiting for an earlier run
+    const lines = out.split('\n');
+    for (; seen < lines.length - 1; seen++) {
+      let m; try { m = JSON.parse(lines[seen]); } catch (e) { continue; }
+      if (m.stage === 'listed') log(`Batocera game list: ${m.count} games listed; their pictures are still coming (this carries on if the app is closed)`);
+      else if (m.stage === 'waiting') log('Batocera game list: waiting for the update already running to finish');
+    }
+  });
   glRun.stderr.on('data', d => { out += d; });
   glRun.on('error', e => { out += `{"error": ${JSON.stringify(e.message)}}\n`; });
   glRun.on('close', code => {

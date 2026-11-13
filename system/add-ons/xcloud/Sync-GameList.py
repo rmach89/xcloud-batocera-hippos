@@ -22,8 +22,14 @@ The game list comes from Microsoft's public Game Pass catalog (the list the
 Xbox site itself uses), the details from Microsoft's store catalog. Neither
 needs a sign-in, and nothing is sent to them but the IDs of the games.
 Progress is printed as one JSON object per line.
+
+It keeps going if the app closes before it's done (a big list takes a few
+minutes): the games are listed first, with whatever pictures are already
+there, then the pictures come in; what's left goes to xcloud-app.log, and
+EmulationStation is asked to reload its games when it's finished. Two runs
+never overlap: a second one waits for the first.
 """
-import json, os, re, shutil, sys, tempfile, time, urllib.parse, urllib.request
+import fcntl, json, os, re, shutil, sys, tempfile, time, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
@@ -36,6 +42,10 @@ PICKED = os.path.join(FILES, "picked-games.json")
 CONFIG = os.path.join(FILES, "config.json")
 LS_LIST = os.environ.get("XCLOUD_LAUNCHSINGLE_LIST", "/userdata/system/launchsingle.systems")
 CHANGED = os.environ.get("XCLOUD_GAMELIST_FLAG", "/tmp/xcloud-gamelist-changed")
+APP_LOG = os.environ.get("XCLOUD_APP_LOG", "/userdata/system/logs/xcloud-app.log")
+LOCK = os.path.join(FILES, ".gamelist.lock")
+RELOAD_URL = os.environ.get("XCLOUD_ES_RELOAD", "http://127.0.0.1:1234/reloadgames")
+PARENT = os.getppid()
 SIGLS = os.environ.get("XCLOUD_CATALOG_URL", "https://catalog.gamepass.com/sigls/v2")
 PRODUCTS = os.environ.get("XCLOUD_PRODUCTS_URL", "https://displaycatalog.mp.microsoft.com/v7.0/products")
 # Microsoft's list of every game that streams in Xbox Cloud Gaming
@@ -51,8 +61,82 @@ KEEP_TAGS = ("playcount", "lastplayed", "gametime", "favorite", "hidden")
 KIDS_AGE = 10
 
 
+_alone = []
+def alone():
+    """The app that started this has closed (its end of the pipe is gone)."""
+    if not _alone and os.getppid() != PARENT:
+        went_alone()
+    return bool(_alone)
+
+
+def went_alone():
+    if _alone:
+        return
+    _alone.append(1)
+    try:  # nothing reads what's printed any more
+        fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(fd, 1)
+        os.close(fd)
+    except OSError:
+        pass
+    log("the app closed before the list was finished; carrying on in the background")
+
+
+def log(msg):
+    try:
+        with open(APP_LOG, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z Batocera game list: " + msg + "\n")
+    except OSError:
+        pass
+
+
 def emit(**kw):
-    print(json.dumps(kw), flush=True)
+    if not alone():
+        try:
+            print(json.dumps(kw), flush=True)
+            return
+        except (BrokenPipeError, OSError):
+            went_alone()
+    # after the app has gone: what matters goes to its log instead
+    if "warning" in kw:
+        log(kw["warning"])
+    elif "error" in kw:
+        log(f"couldn't update ({kw['error']})")
+    elif kw.get("stage") == "listed":
+        log(f"{kw.get('count')} games listed; their pictures are still coming")
+    elif kw.get("done"):
+        log(f"{kw.get('count')} games, finished after the app closed")
+
+
+def app_running():
+    """The Xbox Cloud Gaming app (its browser engine) is open."""
+    me = os.path.join(FILES, "runtime") + "/"
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                if me.encode() in f.read():
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def reload_es():
+    """When the app is closed, EmulationStation shows the new list straight away
+    (with the app open, its launcher asks for this when it closes)."""
+    if not alone() or app_running():
+        return
+    try:
+        urllib.request.urlopen(RELOAD_URL, timeout=5).read()
+        try:
+            os.remove(CHANGED)
+        except OSError:
+            pass
+        log("EmulationStation reloaded its games")
+    except Exception as e:
+        log(f"couldn't ask EmulationStation to reload ({e}); it shows after a restart or Update game lists")
 
 
 def read_json(path, default):
@@ -431,60 +515,8 @@ def make_boxes(info, got, state):
     return out
 
 
-def main():
-    args = sys.argv[1:]
-    mode = args[0] if args and args[0] in ("all", "picked", "off") else read_json(CONFIG, {}).get("game_list", "off")
-    market, lang = market_of(args[args.index("--market") + 1] if "--market" in args and args.index("--market") + 1 < len(args) else "en-us")
-    state = read_json(STATE, {})
-    state.setdefault("games", {})
-    os.makedirs(IMAGES, exist_ok=True)
-
-    if mode == "off":
-        gone = set(remove_ours(state))
-        root = load_gamelist()
-        for g in list(root.findall("game")):
-            if (g.findtext("path") or "") in gone:
-                root.remove(g)
-        write_gamelist(root)
-        set_launchsingle(True, state)
-        state.update(mode="off", count=0, synced=time.time())
-        write_atomic(STATE, json.dumps(state, indent=2) + "\n")
-        open(CHANGED, "w").write("off\n")
-        emit(done=True, mode="off", count=0)
-        return 0
-
-    emit(stage="list")
-    ids = cloud_ids(lang, market) if mode == "all" else picked_ids()
-    if mode == "all" and not ids:
-        raise RuntimeError("Microsoft's cloud game list came back empty")
-    emit(stage="details", total=len(ids))
-    info = details(ids, lang, market)
-    if ids and not info:
-        raise RuntimeError("Microsoft's store catalog didn't answer")
-
-    # pictures: box art, a background and the logo (skipped when space is short)
-    want3d = bool(read_json(CONFIG, {}).get("game_list_3d", False))
-    free_mb = shutil.disk_usage(ROMS).free // (1024 * 1024)
-    jobs = []
-    for pid, d in info.items():
-        if want3d and free_mb > 200 and d.get("poster"):
-            jobs.append((sized(d["poster"], 600), os.path.join(IMAGES, f"{pid}-poster")))
-        if free_mb > 100 and d["box"]:
-            jobs.append((sized(d["box"], 480), os.path.join(IMAGES, f"{pid}-image")))
-        if free_mb > 100 and d["logo"]:
-            jobs.append((sized(d["logo"], 400, False), os.path.join(IMAGES, f"{pid}-marquee")))
-        if free_mb > 400 and d["fanart"]:
-            jobs.append((sized(d["fanart"], 1280), os.path.join(IMAGES, f"{pid}-fanart")))
-    got = {}
-    with ThreadPoolExecutor(8) as pool:
-        for n, (job, path) in enumerate(zip(jobs, pool.map(fetch_image, jobs)), 1):
-            got[job[1]] = path
-            if n % 25 == 0 or n == len(jobs):
-                emit(stage="art", done=n, total=len(jobs))
-
-    # 3D cases, drawn from the tall cover (or the box art) (Settings > 3D game boxes)
-    boxes = make_boxes(info, got, state) if want3d else {}
-
+def list_games(info, got, boxes, state):
+    """The games' entries in gamelist.xml (and their small files), with the pictures in got / boxes."""
     # the games no longer listed go (only ones this script made)
     gone = set(remove_ours(state, keep_ids=set(info)))
     root = load_gamelist()
@@ -541,6 +573,87 @@ def main():
         poster = got.get(os.path.join(IMAGES, f"{pid}-poster"))
         state["games"][pid] = {"file": rel, "title": d["title"], "images": list(pics.values()) + (["./images/" + os.path.basename(poster)] if poster else []),
                                "age": d["age"], "rating_label": d["label"], "adult": adult}
+    write_gamelist(root)
+
+
+def main():
+    args = sys.argv[1:]
+    mode = args[0] if args and args[0] in ("all", "picked", "off") else read_json(CONFIG, {}).get("game_list", "off")
+    market, lang = market_of(args[args.index("--market") + 1] if "--market" in args and args.index("--market") + 1 < len(args) else "en-us")
+    state = read_json(STATE, {})
+    state.setdefault("games", {})
+    os.makedirs(IMAGES, exist_ok=True)
+
+    if mode == "off":
+        gone = set(remove_ours(state))
+        root = load_gamelist()
+        for g in list(root.findall("game")):
+            if (g.findtext("path") or "") in gone:
+                root.remove(g)
+        write_gamelist(root)
+        set_launchsingle(True, state)
+        state.update(mode="off", count=0, synced=time.time())
+        write_atomic(STATE, json.dumps(state, indent=2) + "\n")
+        open(CHANGED, "w").write("off\n")
+        emit(done=True, mode="off", count=0)
+        return 0
+
+    emit(stage="list")
+    ids = cloud_ids(lang, market) if mode == "all" else picked_ids()
+    if mode == "all" and not ids:
+        raise RuntimeError("Microsoft's cloud game list came back empty")
+    emit(stage="details", total=len(ids))
+    info = details(ids, lang, market)
+    if ids and not info:
+        raise RuntimeError("Microsoft's store catalog didn't answer")
+
+    # the games straight away, with the pictures already here (a big list's
+    # pictures take minutes; this way the list is there even if that's cut short)
+    def have(base):
+        for e in (".jpg", ".png", ".webp"):
+            if os.path.exists(base + e):
+                return base + e
+        return ""
+    now = {}
+    for pid in info:
+        for kind in ("image", "marquee", "fanart", "poster"):
+            b = os.path.join(IMAGES, f"{pid}-{kind}")
+            now[b] = have(b)
+    want3d_now = bool(read_json(CONFIG, {}).get("game_list_3d", False))
+    old_boxes = {pid: os.path.join(IMAGES, f"{pid}-box3d.png") for pid in info
+                 if want3d_now and os.path.exists(os.path.join(IMAGES, f"{pid}-box3d.png"))}
+    list_games(info, now, old_boxes, state)
+    set_launchsingle(False, state)
+    state.update(mode=mode, count=len(info), market=lang)
+    write_atomic(STATE, json.dumps(state, indent=2) + "\n")
+    open(CHANGED, "w").write(mode + "\n")
+    emit(stage="listed", count=len(info))
+    reload_es()
+
+    # pictures: box art, a background and the logo (skipped when space is short)
+    want3d = bool(read_json(CONFIG, {}).get("game_list_3d", False))
+    free_mb = shutil.disk_usage(ROMS).free // (1024 * 1024)
+    jobs = []
+    for pid, d in info.items():
+        if want3d and free_mb > 200 and d.get("poster"):
+            jobs.append((sized(d["poster"], 600), os.path.join(IMAGES, f"{pid}-poster")))
+        if free_mb > 100 and d["box"]:
+            jobs.append((sized(d["box"], 480), os.path.join(IMAGES, f"{pid}-image")))
+        if free_mb > 100 and d["logo"]:
+            jobs.append((sized(d["logo"], 400, False), os.path.join(IMAGES, f"{pid}-marquee")))
+        if free_mb > 400 and d["fanart"]:
+            jobs.append((sized(d["fanart"], 1280), os.path.join(IMAGES, f"{pid}-fanart")))
+    got = {}
+    with ThreadPoolExecutor(8) as pool:
+        for n, (job, path) in enumerate(zip(jobs, pool.map(fetch_image, jobs)), 1):
+            got[job[1]] = path
+            if n % 25 == 0 or n == len(jobs):
+                emit(stage="art", done=n, total=len(jobs))
+
+    # 3D cases, drawn from the tall cover (or the box art) (Settings > 3D game boxes)
+    boxes = make_boxes(info, got, state) if want3d else {}
+
+    list_games(info, got, boxes, state)
 
     # 3D cases no longer used (turned off, or the game left the list)
     for f in os.listdir(IMAGES):
@@ -549,7 +662,6 @@ def main():
                 os.remove(os.path.join(IMAGES, f))
             except OSError:
                 pass
-    write_gamelist(root)
     set_launchsingle(False, state)
     state.update(mode=mode, count=len(info), synced=time.time(), market=lang, box3d=bool(boxes))
     if not want3d:
@@ -557,11 +669,28 @@ def main():
     write_atomic(STATE, json.dumps(state, indent=2) + "\n")
     open(CHANGED, "w").write(mode + "\n")
     emit(done=True, mode=mode, count=len(info))
+    reload_es()
     return 0
+
+
+def locked():
+    """One run at a time: a second one waits for the first (which may be
+    carrying on after the app closed), then goes, quickly, with its pictures."""
+    try:
+        lock = open(LOCK, "w")
+    except OSError:
+        return None
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        emit(stage="waiting")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
 
 
 if __name__ == "__main__":
     try:
+        _lock = locked()
         sys.exit(main())
     except Exception as e:
         emit(error=str(e))
