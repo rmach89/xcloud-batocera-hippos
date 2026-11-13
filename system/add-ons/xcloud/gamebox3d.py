@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 GREEN = (16, 124, 16)
 LIME = (64, 190, 40)
-VERSION = 9   # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 9: covers with a banner kept at their top)
+VERSION = 10  # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 10: covers with a banner kept at their top)
 
 
 def _font(size):
@@ -214,8 +214,9 @@ def flat(cover, features, width=480):
 
 def top_banner(img):
     """True when a cover starts with a banner across its top: a strip at most a
-    sixth of its height, mostly one colour, ending in a straight line across the
-    whole width (the XBOX 360 band, "Digital version"...)."""
+    sixth of its height, mostly one colour or smoothly shaded, ending in a
+    straight line across the whole width (the XBOX 360 band, the original
+    Xbox's, "Digital version"...)."""
     w, h = 120, 180
     im = img.convert("RGB").resize((w, h), Image.Resampling.BILINEAR)
     px = im.load()
@@ -236,6 +237,11 @@ def top_banner(img):
                 bins[k] = bins.get(k, 0) + 1
         top = max(bins.values()) if bins else 0
         if top >= 0.45 * w * max(1, y - 1):
+            return True
+        # or it's smooth: a flat colour or a gentle shade (the original Xbox's
+        # brushed-metal band), with only its logo and lettering as detail
+        smooth = sum(1 for yy in range(0, y - 1) for x in range(w - 1) if diff(px[x, yy], px[x + 1, yy]) < 24)
+        if smooth >= 0.55 * (w - 1) * max(1, y - 1):
             return True
     return False
 

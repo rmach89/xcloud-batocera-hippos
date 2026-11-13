@@ -467,7 +467,7 @@ def ours(g):
     return False
 
 
-BOX_VERSION = 9   # gamebox3d.VERSION, for when Pillow isn't here
+BOX_VERSION = 10  # gamebox3d.VERSION, for when Pillow isn't here
 
 _converted = []
 def open_picture(path):
