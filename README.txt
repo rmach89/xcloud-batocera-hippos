@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.2 (November 2026)
+Version 1.2.3 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -404,6 +404,13 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.3
+-------------------
+- Holding View on a game finds that game's own row title (the row's
+  section on the Xbox page), not another one such as Genres.
+- xcloud-app.log notes where the Library page gets its games from, for
+  the coming "Games I own" choice.
 
 What's new in 1.2.2
 -------------------

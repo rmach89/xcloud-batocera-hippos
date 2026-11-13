@@ -92,25 +92,32 @@
     } catch (e) { /* not there */ }
   }
   [0, 4000, 15000, 40000].forEach(function (ms) { setTimeout(scanState, ms); });
-  // the Library page (Library > My games): its address and the games on it,
-  // in the log, so the game list can offer "Games I own"
-  var libSeen = {};
+  // the Library page (Library > My games): its address, and where its games
+  // come from, in the log, for the coming "Games I own" choice. The games are
+  // buttons (no links), so the data the page loads is noted: each response
+  // holding Microsoft Store IDs, with how many and the first few.
+  var libSeen = {}, libData = 0;
+  function onLibrary() { return /library/i.test(location.pathname + location.search + location.hash); }
   setInterval(function () {
     try {
-      if (!/library/i.test(location.pathname + location.search)) return;
-      var ids = [];
-      Array.prototype.forEach.call(document.querySelectorAll('a[href]'), function (a) {
-        var m = /\/([0-9A-Z]{12})(?:[/?#]|$)/.exec(a.getAttribute('href') || '');
-        if (m && ids.indexOf(m[1]) < 0) ids.push(m[1]);
-      });
-      var key = location.href + '|' + ids.length;
-      if (!ids.length || libSeen[key]) return;
-      libSeen[key] = 1;
-      say('library page: ' + location.href + ' | ' + ids.length + ' games: ' + ids.slice(0, 12).join(' '));
+      if (!onLibrary() || libSeen[location.href]) return;
+      libSeen[location.href] = 1;
+      var tiles = document.querySelectorAll('main button img, section button img').length;
+      say('library page: ' + location.href + ' | ' + tiles + ' game pictures on screen');
     } catch (e) { /* page between states */ }
   }, 3000);
+  function noteLibraryData(url, text) {
+    if (!onLibrary() || libData >= 12 || !text) return;
+    var ids = [], re = /"([0-9A-Z]{12})"/g, m;
+    while ((m = re.exec(text)) && ids.length < 400) if (/[0-9]/.test(m[1]) && ids.indexOf(m[1]) < 0) ids.push(m[1]);
+    if (!ids.length) return;
+    libData++;
+    say('library data: ' + String(url).split('?')[0].slice(0, 160) + ' | ' + ids.length + ' IDs: ' + ids.slice(0, 8).join(' '));
+  }
   var xhrOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
+    var lu = String(url);
+    if (onLibrary()) this.addEventListener('load', function () { try { noteLibraryData(lu, this.responseText); } catch (e) { /* not text */ } });
     if (/catalog\.gamepass\.com\/sigls/i.test(String(url))) {
       var u = String(url);
       this.addEventListener('load', function () { try { noteListResponse(u, JSON.parse(this.responseText)); } catch (e) { /* not JSON */ } });
@@ -120,6 +127,12 @@
 
   window.fetch = function (input, init) {
     var url = urlOf(input), method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    if (onLibrary() && libData < 12 && !/catalog\.gamepass\.com\/sigls/i.test(url)) {
+      return nativeFetch.apply(this, arguments).then(function (res) {
+        try { res.clone().text().then(function (t) { noteLibraryData(url, t); }).catch(function () {}); } catch (e) { /* ignore */ }
+        return res;
+      });
+    }
     if (/catalog\.gamepass\.com\/sigls/i.test(url)) {
       return nativeFetch.apply(this, arguments).then(function (res) {
         try { res.clone().json().then(function (d) { noteListResponse(url, d); }).catch(function () {}); } catch (e) { /* ignore */ }

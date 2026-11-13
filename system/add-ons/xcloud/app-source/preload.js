@@ -680,11 +680,30 @@ function checkRowHold(s) {
     if (!rowDone && !rowSpoiled && Date.now() - rowStart >= ROW_HOLD_MS) { rowDone = true; openRow(); }
   } else { rowStart = 0; rowDone = false; rowSpoiled = false; }
 }
-// the row's title above a tile: the nearest short link or button above it in
-// the same row (not another game's tile, which has a picture)
+// the row's title for a tile: on the Xbox site each row is a <section> whose
+// heading (often a link, "Stream for free with ads >") comes before its
+// carousel of game buttons. Only that section is searched, so another row's
+// title is never picked.
 function rowTitleFor(tile) {
+  const sec = tile.closest('section');
+  if (sec) {
+    const before = el => !!(el.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const isTile = el => !!el.querySelector('img,video,picture') || el.contains(tile) || tile.contains(el);
+    // a link or button before the games, with a short text and no picture
+    for (const c of sec.querySelectorAll('a[href],button,[role=link],[role=button]')) {
+      if (!before(c) || isTile(c) || !visible(c)) continue;
+      const txt = (c.textContent || '').trim();
+      if (txt && txt.length <= 80) return c;
+    }
+    // or the heading itself, clicked through whatever it sits in
+    for (const h of sec.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading]')) {
+      if (!before(h) || !visible(h) || !(h.textContent || '').trim()) continue;
+      return h.querySelector('a,button,[role=link],[role=button]') || h.closest('a,button,[role=link],[role=button]') || h;
+    }
+  }
+  // no section: the nearest short link or button just above the tile
   const tr = tile.getBoundingClientRect();
-  for (let a = tile.parentElement, depth = 0; a && a !== document.body && depth < 14; a = a.parentElement, depth++) {
+  for (let a = tile.parentElement, depth = 0; a && a !== document.body && depth < 6; a = a.parentElement, depth++) {
     let best = null, bestGap = Infinity;
     for (const c of a.querySelectorAll('a[href],button,[role=link],[role=button]')) {
       if (c === tile || c.contains(tile) || tile.contains(c) || !visible(c)) continue;
@@ -694,11 +713,24 @@ function rowTitleFor(tile) {
       const r = c.getBoundingClientRect();
       if (r.height > 80 || r.bottom > tr.top + 4) continue;
       const gap = tr.top - r.bottom;
-      if (gap <= 200 && gap < bestGap) { best = c; bestGap = gap; }
+      if (gap <= 120 && gap < bestGap) { best = c; bestGap = gap; }
     }
     if (best) return best;
   }
   return null;
+}
+// what a row's section holds before its games, for the log when no title is found
+function sectionSummary(tile) {
+  const sec = tile.closest('section');
+  if (!sec) return 'no section';
+  const out = [];
+  for (const el of sec.querySelectorAll('*')) {
+    if (out.length >= 6 || el.contains(tile)) { if (out.length >= 6) break; continue; }
+    if (!(el.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING)) break;
+    const own = Array.from(el.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').trim();
+    if (own) out.push(`${describe(el)} "${own.slice(0, 40)}"`);
+  }
+  return out.join(' / ') || 'nothing with text before the games';
 }
 function describe(el) {
   if (!el || !el.tagName) return String(el);
@@ -711,12 +743,12 @@ function openRow() {
   const t = rowTitleFor(tile);
   if (!t) {
     const up = []; for (let a = tile.parentElement, i = 0; a && i < 5; a = a.parentElement, i++) up.push(describe(a));
-    appLog(`View held: no row title found above ${describe(tile)} (in ${up.join(' < ')})`);
+    appLog(`View held: no row title found above ${describe(tile)} (in ${up.join(' < ')}); the section has: ${sectionSummary(tile)}`);
     toast(TXT.rowNone || 'This row has no full list', 2500);
     return;
   }
   const name = (t.textContent || '').trim().replace(/\s+/g, ' ');
-  appLog(`View held: opening the row "${name}"`);
+  appLog(`View held: opening the row "${name}" (${describe(t)}) for ${describe(tile)}`);
   toast('\u203a ' + name, 2000);
   t.click();
 }
