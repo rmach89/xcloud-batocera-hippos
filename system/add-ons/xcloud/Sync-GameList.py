@@ -430,6 +430,38 @@ def remove_ours(state, keep_ids=()):
     return gone
 
 
+# the pictures this script saves are named after the game's Microsoft Store ID
+OUR_PICTURE = re.compile(r"^([0-9A-Z]{12})-(image|marquee|fanart|poster|box3d|cover)\.(jpg|png|webp)(\.tmp(\.png|\.jpg)?)?$")
+
+
+def sweep_pictures(keep_ids=()):
+    """Delete every picture this script saved for a game not in keep_ids, also ones
+    a run cut short never wrote down (your own pictures, named otherwise, stay)."""
+    n = 0
+    try:
+        names = os.listdir(IMAGES)
+    except OSError:
+        return 0
+    for f in names:
+        m = OUR_PICTURE.match(f)
+        if m and m.group(1) not in keep_ids:
+            try:
+                os.remove(os.path.join(IMAGES, f))
+                n += 1
+            except OSError:
+                pass
+    return n
+
+
+def ours(g):
+    """A gamelist.xml entry this script wrote: its picture is one of ours."""
+    for t in ("image", "thumbnail", "marquee", "fanart"):
+        v = os.path.basename(g.findtext(t) or "")
+        if OUR_PICTURE.match(v):
+            return True
+    return False
+
+
 BOX_VERSION = 7   # gamebox3d.VERSION, for when Pillow isn't here
 
 
@@ -648,9 +680,18 @@ def main():
         gone = set(remove_ours(state))
         root = load_gamelist()
         for g in list(root.findall("game")):
-            if (g.findtext("path") or "") in gone:
+            p = g.findtext("path") or ""
+            if p in gone or (p != DASHBOARD and ours(g)):
+                if p not in gone and p.endswith(".xcloud"):   # its small file too
+                    try:
+                        os.remove(os.path.join(ROMS, p[2:] if p.startswith("./") else p))
+                    except OSError:
+                        pass
                 root.remove(g)
         write_gamelist(root)
+        swept = sweep_pictures()
+        if swept:
+            emit(warning=f"deleted {swept} downloaded pictures")
         set_launchsingle(True, state)
         state.update(mode="off", count=0, synced=time.time())
         write_atomic(STATE, json.dumps(state, indent=2) + "\n")
@@ -734,6 +775,7 @@ def main():
                 os.remove(os.path.join(IMAGES, f))
             except OSError:
                 pass
+    sweep_pictures(keep_ids=set(info))
     set_launchsingle(False, state)
     state.update(mode=mode, count=len(info), synced=time.time(), market=lang, box3d=bool(boxes))
     if not want3d:
