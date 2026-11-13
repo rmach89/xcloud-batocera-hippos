@@ -68,7 +68,7 @@ const DEFAULTS = {
   vibration: 100,            // controller vibration strength in games, 0 (off) to 100%
   language: 'auto',          // 'auto' = the same as Batocera
   controller_fix: true,      // put controllers the browser doesn't know (Steam Deck...) in the Xbox layout
-  game_list: 'off',          // Batocera's Xbox Cloud list: 'off' (opens the app), 'all' cloud games, or 'picked' ones
+  game_list: 'off',          // EmulationStation's Xbox Cloud list: 'off' (just the app), 'all' cloud games, 'free' (free with ads) or 'picked' ones
   game_list_3d: false,       // the games' pictures in that list: 3D cases instead of the flat box art
   sign_out_on_exit: false,   // sign out of Xbox every time the app closes
   gpu_acceleration: false
@@ -612,8 +612,8 @@ function settingsHtml() {
     'secAcct', 'secGen', 'secStream', 'secPic', 'secPad', 'secBato', 'secHelp', 'autoH',
     'gpuT', 'gpuHelp', 'shT', 'shHelp', 'clT', 'clHelp', 'ctT', 'saT', 'brT', 'picHelp', 'shLow', 'shMed', 'shHigh', 'statsT', 'statsHelp', 'vibT', 'vibHelp', 'introSound', 'introSoundHelp', 'muted',
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
-    'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
-    'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b'];
+    'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glFree', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpFree', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
+    'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b'];
   const T = {};
   for (const [code] of i18n.LANGS) {
     T[code] = Object.fromEntries(KEYS.map(k => [k, i18n.t(code, k)]));
@@ -846,7 +846,7 @@ function settingsHtml() {
   var ri = Math.max(0, regions.indexOf(S.region));
   var li = Math.max(0, S.langs.findIndex(function (l) { return l[0] === S.choice; }));
   var INTRO = ['always', 'daily', 'off'], ii = Math.max(0, INTRO.indexOf(S.intro));
-  var GL = ['off', 'all', 'picked'], gi = Math.max(0, GL.indexOf(S.glist));
+  var GL = ['off', 'all', 'free', 'picked'], gi = Math.max(0, GL.indexOf(S.glist));
   // the stream options
   var RES = ['auto', '1080p', '1080p-hq', '1440p'], rsi = Math.max(0, RES.indexOf(S.res));
   var SH = ['off', 'low', 'medium', 'high'], shi = Math.max(0, SH.indexOf(S.sharpen));
@@ -911,7 +911,7 @@ function settingsHtml() {
     var vars = { view: n.view, menu: n.menu, t: T._t, t1: T._t1 };
     var list = $('clist');
     list.textContent = '';
-    for (var i = 1; i <= 8; i++) {
+    for (var i = 1; i <= 9; i++) {
       var r = document.createElement('div'); r.className = 'crow';
       var k = document.createElement('div'); k.className = 'k'; k.textContent = tx('c' + i + 'a', vars);
       var d = document.createElement('div'); d.className = 'd'; d.textContent = tx('c' + i + 'b', vars);
@@ -955,11 +955,11 @@ function settingsHtml() {
     $('highlight-state').textContent = S.highlight ? tx('on') : tx('off');
     $('soe').className = 'toggle' + (S.soe ? ' yes' : '');
     $('soe-state').textContent = S.soe ? tx('on') : tx('off');
-    $('glist').textContent = tx({ off: 'glOff', all: 'glAll', picked: 'glPick' }[GL[gi]]);
+    $('glist').textContent = tx({ off: 'glOff', all: 'glAll', free: 'glFree', picked: 'glPick' }[GL[gi]]);
     var busy = S.glPct != null;
     $('gl-bar').style.display = busy ? 'flex' : 'none';
     if (busy) { $('gl-fill').style.width = S.glPct + '%'; $('gl-pct').textContent = S.glPct + '%'; }
-    $('gl-help').textContent = busy || S.glBusy ? tx('glBusy') : tx({ off: 'glHelpOff', all: 'glHelpAll', picked: 'glHelpPick' }[GL[gi]]) +
+    $('gl-help').textContent = busy || S.glBusy ? tx('glBusy') : tx({ off: 'glHelpOff', all: 'glHelpAll', free: 'glHelpFree', picked: 'glHelpPick' }[GL[gi]]) +
       (GL[gi] === S.glist && S.glist !== 'off' && S.glCount ? ' \u00b7 ' + tx('glCount', { n: S.glCount }) : '');
     if (S.game) {
       var canPick = GL[gi] === 'picked';
@@ -2624,7 +2624,7 @@ function pickTipHtml() {
 // Settings saved: the choice is for the whole machine (config.json)
 function saveGameList(q) {
   const mode = String(q.get('glist') || '');
-  if (!['off', 'all', 'picked'].includes(mode)) return;
+  if (!['off', 'all', 'free', 'picked'].includes(mode)) return;
   if (mode === 'picked' && cfg.game_list !== 'picked') pickTipDue();
   let pickChanged = false;
   const id = String(q.get('gid') || '').toUpperCase();
@@ -3397,7 +3397,7 @@ function createWindow() {
 
 function preloadText() {
   const L = cfg.language;
-  const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint'];
+  const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone'];
   const text = Object.fromEntries(keys.map(k => [k, i18n.t(L, k)]));
   // the Japanese / Korean letters, for the keyboard and messages on the Xbox page
   return { lang: L, text, fontCss: L === 'ja' || L === 'ko' ? i18n.FONT_CSS : '', fontStack: i18n.FONT_STACK };

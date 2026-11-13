@@ -92,6 +92,23 @@
     } catch (e) { /* not there */ }
   }
   [0, 4000, 15000, 40000].forEach(function (ms) { setTimeout(scanState, ms); });
+  // the Library page (Library > My games): its address and the games on it,
+  // in the log, so the game list can offer "Games I own"
+  var libSeen = {};
+  setInterval(function () {
+    try {
+      if (!/library/i.test(location.pathname + location.search)) return;
+      var ids = [];
+      Array.prototype.forEach.call(document.querySelectorAll('a[href]'), function (a) {
+        var m = /\/([0-9A-Z]{12})(?:[/?#]|$)/.exec(a.getAttribute('href') || '');
+        if (m && ids.indexOf(m[1]) < 0) ids.push(m[1]);
+      });
+      var key = location.href + '|' + ids.length;
+      if (!ids.length || libSeen[key]) return;
+      libSeen[key] = 1;
+      say('library page: ' + location.href + ' | ' + ids.length + ' games: ' + ids.slice(0, 12).join(' '));
+    } catch (e) { /* page between states */ }
+  }, 3000);
   var xhrOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
     if (/catalog\.gamepass\.com\/sigls/i.test(String(url))) {

@@ -21,7 +21,7 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 - **Controller vibration** strength, and **GPU acceleration** (including hardware video decoding).
 
 **EmulationStation game list** (optional)
-- **All cloud games** (about 570), **Games I pick** (add a game with F8 or LB + RB + LT + RT), or **Off** (just the app itself).
+- **All cloud games** (about 570), **Free with ads** (the games anyone can play free with ads, no Game Pass needed), **Games I pick** (add a game with F8 or LB + RB + LT + RT), or **Off** (just the app itself).
 - Each game comes with box art, background, logo, description, developer, release date and age rating, all from Microsoft's catalog. Picking a game opens the app straight into it.
 - **3D game boxes**: a black case with the cover, the name on the spine, an age-rating tile, and badges for games that support **keyboard and mouse** or **touch**.
 - The list updates itself every few days. A progress bar shows how far an update has got, and an update carries on in the background if you close the app.
@@ -62,6 +62,7 @@ The installer checks this repository first. If a newer release is out, it offers
 | Welcome screen and Settings | hold Menu (1 s) | hold Options | — |
 | Settings on the dashboard | — | — | Backspace |
 | Add or remove the current game in EmulationStation's list | hold LB + RB + LT + RT | hold L1 + R1 + L2 + R2 | F8 |
+| Open a whole row (its title) on the dashboard | hold View on a game in it (1 s) | hold Share/Create | — |
 
 In Settings: up and down to move, left and right to change, A to select, Menu to save, B to cancel. The app's own screens show your controller's buttons: A B X Y on Xbox, ✕ ○ □ △ on PlayStation.
 
@@ -74,7 +75,7 @@ In Settings: up and down to move, left and right to change, A to select, Menu to
 | Stream | Resolution, stream as a Windows PC, GPU acceleration, stream stats |
 | Picture | Sharpening, Clarity boost, contrast, colour saturation, brightness |
 | Controller | The full list of controls, vibration strength |
-| EmulationStation | The game list (Off / All cloud games / Games I pick), 3D game boxes |
+| EmulationStation | The game list (Off / All cloud games / Free with ads / Games I pick), 3D game boxes |
 | Help and maintenance | Reload dashboard, clear cache, save logs for help, updates |
 
 ## Profiles and PIN

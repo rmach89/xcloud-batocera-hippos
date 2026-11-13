@@ -665,6 +665,62 @@ function checkPickCombo(s) {
   } else { pickSince = 0; pickDone = false; }
 }
 
+// ---------- hold View on a game: open its whole row ----------
+// Xbox's controller navigation only moves between game tiles, so a row's
+// title ("Stream for free with ads >") can only be clicked with a mouse.
+// Holding View alone for a second on a tile opens that row's full list.
+// (A tap of View still goes to Xbox; Menu during the hold is the exit combo.)
+const ROW_HOLD_MS = 1000;
+let rowStart = 0, rowDone = false, rowSpoiled = false;
+function checkRowHold(s) {
+  if (!ON_DASH || OVERLAY_UP || osk.isOpen) { rowStart = 0; return; }
+  if (s[BTN.VIEW]) {
+    if (s[BTN.MENU]) rowSpoiled = true;
+    if (!rowStart) rowStart = Date.now();
+    if (!rowDone && !rowSpoiled && Date.now() - rowStart >= ROW_HOLD_MS) { rowDone = true; openRow(); }
+  } else { rowStart = 0; rowDone = false; rowSpoiled = false; }
+}
+// the row's title above a tile: the nearest short link or button above it in
+// the same row (not another game's tile, which has a picture)
+function rowTitleFor(tile) {
+  const tr = tile.getBoundingClientRect();
+  for (let a = tile.parentElement, depth = 0; a && a !== document.body && depth < 14; a = a.parentElement, depth++) {
+    let best = null, bestGap = Infinity;
+    for (const c of a.querySelectorAll('a[href],button,[role=link],[role=button]')) {
+      if (c === tile || c.contains(tile) || tile.contains(c) || !visible(c)) continue;
+      if (c.querySelector('img,video,picture')) continue;
+      const txt = (c.textContent || '').trim();
+      if (!txt || txt.length > 80) continue;
+      const r = c.getBoundingClientRect();
+      if (r.height > 80 || r.bottom > tr.top + 4) continue;
+      const gap = tr.top - r.bottom;
+      if (gap <= 200 && gap < bestGap) { best = c; bestGap = gap; }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+function describe(el) {
+  if (!el || !el.tagName) return String(el);
+  const cls = typeof el.className === 'string' ? el.className.split(/\s+/).slice(0, 2).join('.') : '';
+  return el.tagName.toLowerCase() + (cls ? '.' + cls : '') + (el.getAttribute('aria-label') ? ` "${el.getAttribute('aria-label').slice(0, 40)}"` : '');
+}
+function openRow() {
+  const tile = document.activeElement;
+  if (!tile || tile === document.body || tile === document.documentElement) { appLog('View held: no game selected, so no row to open'); return; }
+  const t = rowTitleFor(tile);
+  if (!t) {
+    const up = []; for (let a = tile.parentElement, i = 0; a && i < 5; a = a.parentElement, i++) up.push(describe(a));
+    appLog(`View held: no row title found above ${describe(tile)} (in ${up.join(' < ')})`);
+    toast(TXT.rowNone || 'This row has no full list', 2500);
+    return;
+  }
+  const name = (t.textContent || '').trim().replace(/\s+/g, ' ');
+  appLog(`View held: opening the row "${name}"`);
+  toast('\u203a ' + name, 2000);
+  t.click();
+}
+
 // ---------- focus navigation for sign-in pages ----------
 const FOCUSABLE = 'a[href],button,input:not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"]),[role=button],[role=link],[role=checkbox]';
 
@@ -1226,6 +1282,7 @@ function tick() {
   checkExit(s);
   checkMenuHold(s);
   checkPickCombo(s);
+  checkRowHold(s);
   if (ON_INTRO) updateIntroKeys();
   const now = Date.now();
   for (let b = 0; b < s.length; b++) {

@@ -2,7 +2,8 @@
 """Fills Batocera's Xbox Cloud list with the cloud games themselves.
 
 Settings > Batocera game list in the app runs this:
-  Sync-GameList.py all      every Xbox Cloud Gaming game Microsoft lists
+  Sync-GameList.py all      every Xbox Cloud Gaming game Microsoft lists (and the free-with-ads ones)
+  Sync-GameList.py free     the games anyone can play free, with ads
   Sync-GameList.py picked   only the games picked in the app (picked-games.json)
   Sync-GameList.py off      back to the single "Xbox Cloud Gaming" entry
                             (picking Xbox Cloud opens the app straight away)
@@ -52,6 +53,10 @@ PRODUCTS = os.environ.get("XCLOUD_PRODUCTS_URL", "https://displaycatalog.mp.micr
 CLOUD_LIST = "29a81209-df6f-41fd-a528-2ae6b91f719c"
 # Microsoft's lists of the cloud games that can be played with a keyboard and
 # mouse, and with a touch screen: shown as badges on the games' covers
+# Microsoft's list of the cloud games anyone can play free, with ads ("Stream
+# for free with ads" on the Xbox site): Settings > EmulationStation game list
+# > Free with ads, and part of All cloud games too
+FREE_ADS_LIST = "51f14e5d-bdcb-4e04-b9cb-76e5057702df"
 FEATURE_LISTS = {"mkb": "8fa264dd-124f-4af3-97e8-596fcdf4b486", "touch": "9c86f07a-f3e8-45ad-82a0-a1f759597059"}
 DASHBOARD = "./Xbox Cloud Gaming.xcloud"
 UA = "xcloud-app-gamelist/1.0"
@@ -707,7 +712,7 @@ def list_games(info, got, boxes, state, covers=None):
 
 def main():
     args = sys.argv[1:]
-    mode = args[0] if args and args[0] in ("all", "picked", "off") else read_json(CONFIG, {}).get("game_list", "off")
+    mode = args[0] if args and args[0] in ("all", "free", "picked", "off") else read_json(CONFIG, {}).get("game_list", "off")
     market, lang = market_of(args[args.index("--market") + 1] if "--market" in args and args.index("--market") + 1 < len(args) else "en-us")
     state = read_json(STATE, {})
     state.setdefault("games", {})
@@ -739,8 +744,17 @@ def main():
         return 0
 
     emit(stage="list")
-    ids = cloud_ids(lang, market) if mode == "all" else picked_ids()
-    if mode == "all" and not ids:
+    if mode == "free":
+        ids = sigl_ids(FREE_ADS_LIST, lang, market)
+    elif mode == "all":
+        ids = cloud_ids(lang, market)
+        try:   # the free-with-ads games too (not all of them are in Game Pass)
+            ids += [i for i in sigl_ids(FREE_ADS_LIST, lang, market) if i not in ids]
+        except Exception as e:
+            emit(warning=f"couldn't read the free-with-ads list ({e}); those games are left out this time")
+    else:
+        ids = picked_ids()
+    if mode in ("all", "free") and not ids:
         raise RuntimeError("Microsoft's cloud game list came back empty")
     emit(stage="details", total=len(ids))
     info = details(ids, lang, market)

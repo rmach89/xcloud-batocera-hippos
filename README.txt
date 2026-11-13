@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.1 (November 2026)
+Version 1.2.2 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -92,6 +92,10 @@ while on Xbox, or hold S on a keyboard. The welcome screen opens, and
 its View / Select button opens Settings. On the dashboard, Backspace
 opens Settings directly.
 
+A whole row of games: Xbox's controller navigation skips the row titles
+("Stream for free with ads >"). Hold View (Share / Select) for 1 second
+on a game in the row to open its full list.
+
 Intro video: plays while Xbox loads behind it. A, B, X, Menu, Enter or
 Space skip it. Settings > Intro video: every time, once a day, or off.
 
@@ -177,7 +181,8 @@ The rows are grouped in sections:
                              50%, 75% or 100%
 
   EMULATIONSTATION
-  EmulationStation game list off / all cloud games / games I pick
+  EmulationStation game list off / all cloud games / free with ads /
+                             games I pick
   3D game boxes              3D cases instead of flat box art
 
   HELP AND MAINTENANCE
@@ -207,6 +212,8 @@ catalog. Picking one opens the app straight into that game. Xbox Cloud
 Gaming itself stays at the top of the list.
   All cloud games   every cloud game in your region (several hundred),
                     refreshed every few days
+  Free with ads     the games anyone can play free with ads, without
+                    Game Pass (they're in All cloud games too)
   Games I pick      only the ones you add. On a game's page press F8, or
                     hold LB + RB + LT + RT (L1 + R1 + L2 + R2) for a
                     second. Do it again to take the game out.
@@ -397,6 +404,17 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.2
+-------------------
+- EmulationStation game list: new choice "Free with ads", the games
+  anyone can play free with ads, no Game Pass needed (Microsoft's
+  "Stream for free with ads" list). All cloud games includes them too.
+- Hold View for a second on a game on the dashboard to open its whole
+  row (the same as clicking the row's title, which the controller
+  can't reach).
+- xcloud-app.log notes the Library page's address and games, for the
+  coming "Games I own" choice.
 
 What's new in 1.2.1
 -------------------
