@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 GREEN = (16, 124, 16)
 LIME = (64, 190, 40)
-VERSION = 7   # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges)
+VERSION = 8   # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 8: cover kept near its top)
 
 
 def _font(size):
@@ -228,7 +228,9 @@ def _front(cover, logo, W=640, H=960, rating=None, features=None):
         d.line([(0, head - i), (W, head - i)], fill=tuple(int(c1 * (1 - a * 0.5) + c2 * a * 0.5) for c1, c2 in zip(d.im.getpixel((5, head - i))[:3], LIME)))
     d.rectangle([0, head, W, head + 5], fill=GREEN)
     d.line([(0, head), (W, head)], fill=(120, 230, 90), width=2)
-    art = ImageOps.fit(cover.convert("RGB"), (W - 2 * edge, H - head - 5 - edge), Image.Resampling.LANCZOS)
+    # a cover taller than the box loses a little of its bottom rather than its top,
+    # so a banner across the top of a retail cover (XBOX 360...) isn't cut in half
+    art = ImageOps.fit(cover.convert("RGB"), (W - 2 * edge, H - head - 5 - edge), Image.Resampling.LANCZOS, centering=(0.5, 0.1))
     face.paste(art, (edge, head + 5))
     _tile(face, rating, (edge, head + 5, edge + art.width, head + 5 + art.height))
     badges(face, features, (edge, head + 5, edge + art.width, head + 5 + art.height))
