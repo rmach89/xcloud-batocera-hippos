@@ -30,7 +30,7 @@ say() { echo "[Xbox Cloud Gaming] $*"; }
 finish() {   # finish <exit code>: in the menu's window, wait so you can read it
     if [ "$FROM_MENU" = 1 ] && [ -t 0 ]; then
         echo
-        read -r -p "Press Enter to close this window. " _
+        read -r -p "Press Enter to exit the uninstaller. " _
     fi
     exit "$1"
 }
@@ -245,23 +245,14 @@ KEPT_EOF
 fi
 
 echo
-say "Done. Restart EmulationStation (Main Menu > Quit > Restart EmulationStation)."
-if [ -t 0 ]; then
-    read -r -p "Restart EmulationStation now? [Y/n] " answer
-    case "$answer" in
-        n|N|no|NO) ;;
-        *)
-            if command -v batocera-es-swissknife >/dev/null 2>&1; then
-                batocera-es-swissknife --restart >/dev/null 2>&1 &
-                say "Restarting EmulationStation..."
-            elif command -v hippos-swissknife >/dev/null 2>&1; then
-                hippos-swissknife --restart >/dev/null 2>&1 &
-                say "Restarting EmulationStation..."
-            else
-                say "Couldn't restart it automatically. Use Main Menu > Quit > Restart EmulationStation."
-            fi
-            ;;
-    esac
+say "Done. Xbox Cloud Gaming has been removed."
+# EmulationStation reloads its systems and games by itself (the same as Main
+# Menu > Game settings > Update gamelists), so it leaves the carousel without a restart
+if command -v curl >/dev/null 2>&1; then
+    setsid bash -c "sleep 2; curl -s -m 10 http://127.0.0.1:1234/reloadgames" < /dev/null > /dev/null 2>&1 &
+    say "EmulationStation updates its carousel in a moment."
+else
+    say "To see it gone from the carousel: Main Menu > Game settings > Update gamelists."
 fi
 finish 0
 }

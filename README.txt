@@ -363,6 +363,9 @@ It asks first (and asks for the PIN when a child's profile exists).
   systems.
 - Everything it added is removed, and anything a theme had before is
   put back.
+- When it's done, press Enter to exit the uninstaller. EmulationStation
+  reloads by itself and Xbox Cloud Gaming leaves the carousel; there's
+  no need to restart it.
 To remove everything without questions:
   bash /userdata/system/add-ons/xcloud/uninstall.sh --all
 
@@ -417,6 +420,10 @@ What's new in 1.2.0
 - Launch Single Game is now simply optional: the installer no longer
   recommends it on either system, and it's off unless you choose it.
   Installing again keeps your earlier choice.
+- The uninstaller ends with "Press Enter to exit the uninstaller", and
+  EmulationStation reloads by itself instead of needing a restart.
+- Xbox Cloud Gaming stays at the top of its list on HippOS too: its sort
+  name now starts with a space, like its name.
 - The Settings screen is organised into sections: Profile and account,
   General, Stream, Picture, Controller, EmulationStation, and
   Help and maintenance.

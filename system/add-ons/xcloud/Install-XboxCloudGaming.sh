@@ -408,7 +408,7 @@ else
     echo "Kept Launch Single Game."
 fi
 
-echo "Removed Xbox Cloud Gaming. Restart EmulationStation."
+echo "Removed Xbox Cloud Gaming."
 echo "Your Xbox sign-in (profile), settings (config.json) and the package files are still in $FILES"
 echo "so reinstalling keeps you signed in. Delete that folder to remove everything."
 

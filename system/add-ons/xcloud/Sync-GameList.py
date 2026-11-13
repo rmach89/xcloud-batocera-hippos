@@ -362,13 +362,18 @@ def load_gamelist():
     return root
 
 
+PINNED = " Xbox Cloud Gaming"   # a space first: it sorts before every letter, number and symbol
+
+
 def pin_first(g):
     """The app's own entry stays at the top of the list: its sort name for
-    EmulationStation versions that use one (Batocera since December 2025), and
-    a name starting with a space for the ones that sort by the name itself (a
-    space comes before every letter)."""
-    if g.find("sortname") is None:
-        sub(g, "sortname", "!Xbox Cloud Gaming")
+    EmulationStation versions that use one (Batocera since December 2025, HippOS),
+    and its name for the ones that sort by the name itself; both start with a space."""
+    sn = g.find("sortname")
+    if sn is None:
+        sub(g, "sortname", PINNED)
+    elif not (sn.text or "").startswith(" "):   # "!Xbox Cloud Gaming" from earlier versions
+        sn.text = PINNED
     n = g.find("name")
     if n is None:
         n = ET.SubElement(g, "name")
