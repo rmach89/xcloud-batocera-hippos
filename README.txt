@@ -214,7 +214,9 @@ Changes show when you're back in EmulationStation. All cloud games takes
 a few minutes the first time (hundreds of pictures, and the 3D boxes):
 the games show first and their pictures follow. You can close the app
 meanwhile; it finishes in the background and EmulationStation reloads
-its games when it's done (xcloud-app.log says when).
+its games when it's done. While it runs, a bar with the percentage shows
+in the top-right corner of the dashboard and under the setting in
+Settings.
 
 3D game boxes: each game becomes a black case with the cover, the
 game's name on the spine and its age rating in the corner. Detailed
@@ -394,7 +396,7 @@ What's new in 1.2.0
   longer stops when the app is closed before it's done: the games are
   listed first, their pictures follow, and it finishes in the
   background, then has EmulationStation reload its games. Progress is in
-  xcloud-app.log.
+  xcloud-app.log. A bar shows how far it has got, as a percentage.
 - Launch Single Game is now simply optional: the installer no longer
   recommends it on either system, and it's off unless you choose it.
   Installing again keeps your earlier choice.

@@ -630,7 +630,7 @@ function settingsHtml() {
     pic: { ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness },
     ivol: cfg.intro_volume, imute: cfg.intro_muted,
     engine: process.versions.electron, appv: VERSION, upd,
-    glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun,
+    glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun, glPct,
     game: pageGame(), gpicked: !!(pageGame() && pickedGames().some(g => g.id === pageGame().id)),
     reload: !SETTINGS_MODE,  // Reload dashboard only when the dashboard is open (not from the F1 shortcut)
     user: curProfile ? profileName(curProfile) : ''
@@ -684,6 +684,9 @@ function settingsHtml() {
   .toggle.yes::after{left:49px;background:#fff}
   .toggle.mute.yes{background:#a4262c}
   .bar.off i{background:#555}
+  .glbar{display:flex;align-items:center;gap:12px;margin-top:6px}
+  .glbar .bar{width:320px;height:10px}
+  .glpct{font-size:16px;font-weight:700;color:#6fbf5f;min-width:48px}
   .state{font-size:16px;color:#bdbdbd;min-width:42px;text-align:right}
   .buttons{display:flex;gap:20px;justify-content:center;margin-top:12px}
   button{border-radius:10px;padding:11px 44px;font-size:22px;font-weight:600;cursor:pointer;font-family:inherit;outline:none}
@@ -798,7 +801,8 @@ function settingsHtml() {
   </div>
   <div class="sec" data-k="secBato"></div>
   <div class="row" id="row-glist">
-    <div><div class="label" data-k="glT"></div><div class="help" id="gl-help"></div></div>
+    <div><div class="label" data-k="glT"></div><div class="help" id="gl-help"></div>
+      <div class="glbar" id="gl-bar" style="display:none"><span class="bar"><i id="gl-fill"></i></span><span class="glpct" id="gl-pct"></span></div></div>
     <div class="picker"><span class="arrow" id="gprev">&#9664;</span><span class="value" id="glist" style="width:260px"></span><span class="arrow" id="gnext">&#9654;</span></div>
   </div>
   <div class="row" id="row-gpick" style="display:none">
@@ -952,7 +956,10 @@ function settingsHtml() {
     $('soe').className = 'toggle' + (S.soe ? ' yes' : '');
     $('soe-state').textContent = S.soe ? tx('on') : tx('off');
     $('glist').textContent = tx({ off: 'glOff', all: 'glAll', picked: 'glPick' }[GL[gi]]);
-    $('gl-help').textContent = S.glBusy ? tx('glBusy') : tx({ off: 'glHelpOff', all: 'glHelpAll', picked: 'glHelpPick' }[GL[gi]]) +
+    var busy = S.glPct != null;
+    $('gl-bar').style.display = busy ? 'flex' : 'none';
+    if (busy) { $('gl-fill').style.width = S.glPct + '%'; $('gl-pct').textContent = S.glPct + '%'; }
+    $('gl-help').textContent = busy || S.glBusy ? tx('glBusy') : tx({ off: 'glHelpOff', all: 'glHelpAll', picked: 'glHelpPick' }[GL[gi]]) +
       (GL[gi] === S.glist && S.glist !== 'off' && S.glCount ? ' \u00b7 ' + tx('glCount', { n: S.glCount }) : '');
     if (S.game) {
       var canPick = GL[gi] === 'picked';
@@ -1023,6 +1030,8 @@ function settingsHtml() {
     location.href = '${ACTION_PREFIX}settings-update-check';
   }
   window.__updateStatus = function (u) { S.upd = u; render(); };
+  // the game list update's progress, live (null: finished)
+  window.__glProgress = function (p) { S.glPct = p; if (p == null) S.glBusy = false; render(); };
   // Clear cache: the stored copies of web pages, pictures and scripts (not the sign-in)
   function clearCache() {
     if (S.cache === 'busy') return;
@@ -2344,6 +2353,31 @@ function mainToast(key, vars, ms) {
   try { if (wc) wc.send('xcloud-toast', i18n.t(cfg.language, key, vars), ms || 5000); } catch (e) { /* ignore */ }
 }
 let glRun = null, glAgain = null;
+// how far the game list update has got, 0-100 (null when none is running):
+// shown as a bar on the dashboard and in Settings
+let glPct = null;
+function glProgress(pct) {
+  pct = pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
+  if (pct === glPct) return;
+  glPct = pct;
+  const text = pct == null ? '' : i18n.t(cfg.language, 'glBusy');
+  try { if (mainWin && mainWin.webContents) mainWin.webContents.send('xcloud-glprogress', pct, text); } catch (e) { /* window closing */ }
+  const wc = settingsWc;
+  if (wc && !wc.isDestroyed()) wc.executeJavaScript(`window.__glProgress && window.__glProgress(${JSON.stringify(pct)})`).catch(() => { /* Settings closed */ });
+}
+// a step of the update (one JSON line from Sync-GameList.py) as a share of the whole:
+// the list and details 0-15%, the pictures up to 85% (100% without 3D boxes), the 3D boxes the rest
+function glStep(m, box3d) {
+  const artEnd = box3d ? 85 : 100;
+  if (m.stage === 'waiting') return 0;
+  if (m.stage === 'list') return 2;
+  if (m.stage === 'details') return 6;
+  if (m.stage === 'listed') return 15;
+  if (m.stage === 'art' && m.total) return 15 + (artEnd - 15) * m.done / m.total;
+  if (m.stage === 'boxes' && m.total) return 85 + 15 * m.done / m.total;
+  if (m.done === true) return 100;
+  return null;
+}
 // ---- 3D game boxes drawn by the app (when Batocera's Python has no Pillow) ----
 const boxTried = new Set();
 // the age-rating tile on a 3D box: the same as gamebox3d.py's (the app's own
@@ -2463,14 +2497,18 @@ function runGameList(mode, why, tell) {
     const lines = out.split('\n');
     for (; seen < lines.length - 1; seen++) {
       let m; try { m = JSON.parse(lines[seen]); } catch (e) { continue; }
+      const p = glStep(m, !!cfg.game_list_3d && mode !== 'off');
+      if (p != null && mode !== 'off') glProgress(p);
       if (m.stage === 'listed') log(`Batocera game list: ${m.count} games listed; their pictures are still coming (this carries on if the app is closed)`);
       else if (m.stage === 'waiting') log('Batocera game list: waiting for the update already running to finish');
     }
   });
   glRun.stderr.on('data', d => { out += d; });
   glRun.on('error', e => { out += `{"error": ${JSON.stringify(e.message)}}\n`; });
+  if (mode !== 'off') glProgress(0);
   glRun.on('close', code => {
     glRun = null;
+    glProgress(null);
     let last = {}, need = [];
     for (const line of out.trim().split('\n').reverse()) { try { last = JSON.parse(line); break; } catch (e) { /* not JSON */ } }
     // what it warned about goes in the log; 3D boxes it couldn't draw itself, the app draws

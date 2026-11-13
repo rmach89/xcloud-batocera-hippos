@@ -486,6 +486,31 @@ function toast(msg, ms) {
 }
 ipcRenderer.on('xcloud-toast', (e, msg, ms) => toast(msg, ms));
 
+// the EmulationStation game list update: a small bar with the percentage in
+// the top-right corner of the dashboard until it's done (pct null hides it).
+// Not shown over a game in full screen.
+let glEl = null;
+ipcRenderer.on('xcloud-glprogress', (e, pct, text) => whenBody(() => {
+  if (pct == null) { if (glEl) { glEl.remove(); glEl = null; } return; }
+  if (!glEl) {
+    glEl = document.createElement('div');
+    glEl.setAttribute('data-xcloud', 'glprogress');
+    Object.assign(glEl.style, {
+      position: 'fixed', top: '18px', right: '22px', zIndex: '2147483646', pointerEvents: 'none',
+      background: 'rgba(16,16,16,0.9)', border: `2px solid ${GREEN}`, borderRadius: '10px',
+      padding: '10px 16px', color: '#fff', font: `600 16px ${FONT_STACK}`, minWidth: '300px'
+    });
+    glEl.innerHTML = '<div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:8px">' +
+      '<span data-t></span><span data-p style="color:#7fd16f;font-weight:700"></span></div>' +
+      '<div style="height:8px;border-radius:4px;background:#3a3a3a;overflow:hidden">' +
+      `<i data-f style="display:block;height:100%;width:0;background:${GREEN};transition:width .3s"></i></div>`;
+    document.body.appendChild(glEl);
+  }
+  glEl.querySelector('[data-t]').textContent = text || '';
+  glEl.querySelector('[data-p]').textContent = pct + '%';
+  glEl.querySelector('[data-f]').style.width = pct + '%';
+}));
+
 // ---------- gamepad reading ----------
 // Combine every connected pad into one set of buttons, plus the left stick as a D-pad.
 let padCount = 0;   // how many controllers the page saw on the last read
