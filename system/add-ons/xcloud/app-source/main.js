@@ -3327,7 +3327,7 @@ function makeMainWin() {
   // older engines only have them, hence arguments[2])
   win.webContents.on('console-message', function (e) {
     const m = String(e && typeof e.message === 'string' ? e.message : arguments[2] || '');
-    if (m.startsWith('[xcloud] ')) log(m.slice(9, 309));
+    if (m.startsWith('[xcloud] ')) log(m.slice(9, 3009));
   });
   win.focus();
   win.once('ready-to-show', () => { win.show(); win.focus(); win.webContents.focus(); });
@@ -3489,7 +3489,7 @@ ipcMain.on('xcloud-home', event => {
 ipcMain.on('xcloud-quit', () => fastExit('controller, exit buttons held'));
 ipcMain.on('xcloud-retry', event => { log('retry from the "can\'t connect" screen (controller)'); openStart(event.sender); });
 ipcMain.on('xcloud-continue', (event, opts) => doContinue(event.sender, !!(opts && opts.never), 'controller'));
-ipcMain.on('xcloud-log', (event, msg) => log(String(msg).slice(0, 300)));
+ipcMain.on('xcloud-log', (event, msg) => log(String(msg).slice(0, 3000)));
 
 app.on('second-instance', () => {
   if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); }

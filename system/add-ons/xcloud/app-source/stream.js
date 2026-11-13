@@ -104,8 +104,42 @@
       libSeen[location.href] = 1;
       var tiles = document.querySelectorAll('main button img, section button img').length;
       say('library page: ' + location.href + ' | ' + tiles + ' game pictures on screen');
+      setTimeout(libraryProbe, 2500);
     } catch (e) { /* page between states */ }
   }, 3000);
+  // where the Library's games are: IDs in the page's own data (its preloaded
+  // state) and in the tiles' React properties, for the log
+  function idsIn(v, depth, seen, out) {
+    if (out.length > 60 || depth > 7 || v == null) return;
+    if (typeof v === 'string') { if (/^[0-9A-Z]{12}$/.test(v) && /[0-9]/.test(v) && out.indexOf(v) < 0) out.push(v); return; }
+    if (typeof v !== 'object' || seen.has(v)) return;
+    seen.add(v);
+    var keys = Array.isArray(v) ? v.slice(0, 400) : Object.keys(v).slice(0, 200);
+    for (var i = 0; i < keys.length; i++) {
+      try { idsIn(Array.isArray(v) ? keys[i] : v[keys[i]], depth + 1, seen, out); } catch (e) { /* getter */ }
+    }
+  }
+  function libraryProbe() {
+    try {
+      var st = window.__PRELOADED_STATE__ || {};
+      Object.keys(st).forEach(function (k) {
+        var ids = []; idsIn(st[k], 0, new WeakSet(), ids);
+        if (ids.length) say('library state: ' + k + ' | ' + ids.length + ' IDs: ' + ids.slice(0, 10).join(' '));
+      });
+      var tiles = Array.prototype.slice.call(document.querySelectorAll('button')).filter(function (b) { return b.querySelector('img'); }).slice(0, 4);
+      tiles.forEach(function (b, n) {
+        var found = [], label = (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 40);
+        Object.keys(b).forEach(function (k) {
+          if (!/^__react(Props|Fiber)/.test(k)) return;
+          var f = b[k], hops = 0;
+          if (/Props/.test(k)) { idsIn(f, 0, new WeakSet(), found); return; }
+          while (f && hops < 12) { idsIn(f.memoizedProps, 0, new WeakSet(), found); f = f.return; hops++; }
+        });
+        var attrs = Array.prototype.map.call(b.attributes, function (a) { return a.name + '=' + String(a.value).slice(0, 30); }).join(' ');
+        say('library tile ' + n + ': "' + label + '" | IDs ' + (found.slice(0, 6).join(' ') || 'none') + ' | ' + attrs);
+      });
+    } catch (e) { say('library probe failed: ' + e.message); }
+  }
   function noteLibraryData(url, text) {
     if (!onLibrary() || libData >= 12 || !text) return;
     var ids = [], re = /"([0-9A-Z]{12})"/g, m;

@@ -737,6 +737,22 @@ function describe(el) {
   const cls = typeof el.className === 'string' ? el.className.split(/\s+/).slice(0, 2).join('.') : '';
   return el.tagName.toLowerCase() + (cls ? '.' + cls : '') + (el.getAttribute('aria-label') ? ` "${el.getAttribute('aria-label').slice(0, 40)}"` : '');
 }
+// a compact outline of the page around a tile, for the log: tags, the first two
+// classes and their own text, from the nearest container holding a few rows
+function outline(tile) {
+  let box = tile;
+  for (let i = 0; i < 8 && box.parentElement && box.parentElement !== document.body; i++) box = box.parentElement;
+  const out = [];
+  (function walk(el, depth) {
+    if (out.join('').length > 2400 || depth > 9) return;
+    if (el !== box && el.querySelector && el.querySelector('img') && el.matches('button,a')) { out.push(`${'  '.repeat(depth)}[tile${el === tile || el.contains(tile) ? ' *HELD*' : ''}]`); return; }
+    const own = Array.from(el.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').trim();
+    const role = el.getAttribute && el.getAttribute('role');
+    if (own || /^(A|BUTTON|SECTION|H[1-6])$/.test(el.tagName) || role) out.push(`${'  '.repeat(depth)}${describe(el)}${role ? ' role=' + role : ''}${el.getAttribute && el.getAttribute('href') ? ' href=' + el.getAttribute('href').slice(0, 60) : ''}${own ? ' "' + own.slice(0, 40) + '"' : ''}`);
+    for (const c of el.children) walk(c, depth + 1);
+  })(box, 0);
+  return out.join(' | ');
+}
 function openRow() {
   const tile = document.activeElement;
   if (!tile || tile === document.body || tile === document.documentElement) { appLog('View held: no game selected, so no row to open'); return; }
@@ -744,10 +760,12 @@ function openRow() {
   if (!t) {
     const up = []; for (let a = tile.parentElement, i = 0; a && i < 5; a = a.parentElement, i++) up.push(describe(a));
     appLog(`View held: no row title found above ${describe(tile)} (in ${up.join(' < ')}); the section has: ${sectionSummary(tile)}`);
+    try { appLog('View held: page outline: ' + outline(tile)); } catch (e) { /* ignore */ }
     toast(TXT.rowNone || 'This row has no full list', 2500);
     return;
   }
   const name = (t.textContent || '').trim().replace(/\s+/g, ' ');
+  try { appLog('View held: page outline: ' + outline(tile)); } catch (e) { /* ignore */ }
   appLog(`View held: opening the row "${name}" (${describe(t)}) for ${describe(tile)}`);
   toast('\u203a ' + name, 2000);
   t.click();
