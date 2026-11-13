@@ -679,15 +679,17 @@ def main():
     if mode == "off":
         gone = set(remove_ours(state))
         root = load_gamelist()
+        # Off: just the app itself in the list. Every other entry goes, and every
+        # other game file in the folder (EmulationStation would list it again)
         for g in list(root.findall("game")):
-            p = g.findtext("path") or ""
-            if p in gone or (p != DASHBOARD and ours(g)):
-                if p not in gone and p.endswith(".xcloud"):   # its small file too
-                    try:
-                        os.remove(os.path.join(ROMS, p[2:] if p.startswith("./") else p))
-                    except OSError:
-                        pass
+            if (g.findtext("path") or "") != DASHBOARD:
                 root.remove(g)
+        for f in os.listdir(ROMS):
+            if f.lower().endswith(".xcloud") and "./" + f != DASHBOARD:
+                try:
+                    os.remove(os.path.join(ROMS, f))
+                except OSError as err:
+                    emit(warning=f"couldn't delete {f} ({err})")
         write_gamelist(root)
         swept = sweep_pictures()
         if swept:

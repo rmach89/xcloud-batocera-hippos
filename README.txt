@@ -210,9 +210,10 @@ Gaming itself stays at the top of the list.
   Games I pick      only the ones you add. On a game's page press F8, or
                     hold LB + RB + LT + RT (L1 + R1 + L2 + R2) for a
                     second. Do it again to take the game out.
-  Off               the list is emptied: the cloud games come out and
-                    every picture the app downloaded is deleted (for
-                    good, not to a trash folder)
+  Off               only Xbox Cloud Gaming itself stays in the list:
+                    every other game comes out and every picture the
+                    app downloaded is deleted (for good, not to a
+                    trash folder)
 Changes show when you're back in EmulationStation. All cloud games takes
 a few minutes the first time (hundreds of pictures, and the 3D boxes):
 the games show first and their pictures follow. You can close the app
@@ -408,8 +409,8 @@ What's new in 1.2.0
 - Keyboard-and-mouse and touch badges on the covers of the games that
   support them, from Microsoft's own lists.
 - Turning the game list Off now deletes every picture it downloaded
-  (also ones from an update that was cut short) and takes all the cloud
-  games out of the list. Your own games and pictures are left alone.
+  (also ones from an update that was cut short) and leaves only Xbox
+  Cloud Gaming itself in the list.
 - Launch Single Game is now simply optional: the installer no longer
   recommends it on either system, and it's off unless you choose it.
   Installing again keeps your earlier choice.
