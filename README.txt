@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.0 (November 2026)
+Version 1.2.1 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -397,6 +397,12 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.1
+-------------------
+- xcloud-app.log names each Game Pass list the Xbox site loads
+  ("catalog list: <id> | <name> | <n> games"), to find Microsoft's
+  free-to-play and play-with-ads lists for the game list.
 
 What's new in 1.2.0
 -------------------

@@ -61,8 +61,54 @@
       return new Response(JSON.stringify(obj), { status: res.status, statusText: res.statusText, headers: res.headers });
     } catch (e) { return res; }
   }
+  // ---------- the site's game lists (Game Pass catalog), named in the log ----------
+  // e.g. "catalog list: 29a81209-... | All games | 573 games": how the app's own
+  // game list options find Microsoft's lists (free to play, play with ads...)
+  var listsSeen = {};
+  function noteList(id, title, n) {
+    id = String(id || '').toLowerCase();
+    if (!/^[0-9a-f-]{36}$/.test(id) || listsSeen[id]) return;
+    listsSeen[id] = 1;
+    say('catalog list: ' + id + ' | ' + (title || '?') + ' | ' + (n == null ? '?' : n) + ' games');
+  }
+  function noteListResponse(url, data) {
+    var m = /[?&]id=([0-9a-f-]{36})/i.exec(url || '');
+    if (!m) return;
+    var title = '', n = null;
+    if (Array.isArray(data)) {
+      title = data[0] && (data[0].title || data[0].siglId === m[1] && data[0].title) || '';
+      n = data.filter(function (x) { return x && x.id; }).length;
+    }
+    noteList(m[1], title, n);
+  }
+  function scanState() {
+    try {
+      var st = window.__PRELOADED_STATE__, sigls = st && st.xcloud && st.xcloud.sigls;
+      if (!sigls) return;
+      Object.keys(sigls).forEach(function (id) {
+        var v = sigls[id] || {}, d = v.data || {};
+        noteList(id, d.title || v.title || d.name || '', Array.isArray(d.products) ? d.products.length : null);
+      });
+    } catch (e) { /* not there */ }
+  }
+  [0, 4000, 15000, 40000].forEach(function (ms) { setTimeout(scanState, ms); });
+  var xhrOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    if (/catalog\.gamepass\.com\/sigls/i.test(String(url))) {
+      var u = String(url);
+      this.addEventListener('load', function () { try { noteListResponse(u, JSON.parse(this.responseText)); } catch (e) { /* not JSON */ } });
+    }
+    return xhrOpen.apply(this, arguments);
+  };
+
   window.fetch = function (input, init) {
     var url = urlOf(input), method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    if (/catalog\.gamepass\.com\/sigls/i.test(url)) {
+      return nativeFetch.apply(this, arguments).then(function (res) {
+        try { res.clone().json().then(function (d) { noteListResponse(url, d); }).catch(function () {}); } catch (e) { /* ignore */ }
+        return res;
+      });
+    }
     if (/\/v5\/sessions\/cloud\/play(\?|$)/.test(url) && method === 'POST') return playRequest(input, init);
     if (/\/v5\/sessions\/cloud\/[^/]+\/configuration(\?|$)/.test(url) && method === 'GET') return configRequest(input, init);
     return nativeFetch.apply(this, arguments);
