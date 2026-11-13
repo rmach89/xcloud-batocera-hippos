@@ -177,7 +177,7 @@ The rows are grouped in sections:
                              50%, 75% or 100%
 
   EMULATIONSTATION
-  Batocera game list         off / all cloud games / games I pick
+  EmulationStation game list off / all cloud games / games I pick
   3D game boxes              3D cases instead of flat box art
 
   HELP AND MAINTENANCE
@@ -200,11 +200,11 @@ The rows are grouped in sections:
 
 EmulationStation game list
 --------------------------
-Settings > Batocera game list puts the cloud games themselves in
-EmulationStation's Xbox Cloud list. Each game comes with art, description,
-developer, release date and age rating from Microsoft's catalog.
-Picking one opens the app straight into that game. Xbox Cloud Gaming
-itself stays at the top of the list.
+Settings > EmulationStation game list puts the cloud games themselves in
+EmulationStation's Xbox Cloud list. Each game comes with art,
+description, developer, release date and age rating from Microsoft's
+catalog. Picking one opens the app straight into that game. Xbox Cloud
+Gaming itself stays at the top of the list.
   All cloud games   every cloud game in your region (several hundred),
                     refreshed every few days
   Games I pick      only the ones you add. On a game's page press F8, or
@@ -390,10 +390,11 @@ What's new in 1.2.0
   Sharpening, Clarity boost, Contrast / Colour saturation / Brightness
   sliders, Stream stats and Controller vibration strength. They're
   logged in xcloud-app.log when saved and when a game starts.
-- Batocera game list "All cloud games" (about 500 games) no longer stops
-  when the app is closed before it's done: the games are listed first,
-  their pictures follow, and it finishes in the background, then has
-  EmulationStation reload its games. Progress is in xcloud-app.log.
+- EmulationStation game list "All cloud games" (about 500 games) no
+  longer stops when the app is closed before it's done: the games are
+  listed first, their pictures follow, and it finishes in the
+  background, then has EmulationStation reload its games. Progress is in
+  xcloud-app.log.
 - Launch Single Game is now simply optional: the installer no longer
   recommends it on either system, and it's off unless you choose it.
   Installing again keeps your earlier choice.
