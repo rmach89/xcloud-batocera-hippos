@@ -31,7 +31,7 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 
 ## What you need
 
-- **Batocera or HippOS** on a 64-bit PC, a 64-bit ARM board or handheld, or 32-bit ARM (see [Compatibility](#compatibility)).
+- **Batocera or HippOS** on a 64-bit PC (tested), or a PC handheld or ARM device (not fully tested yet; see [Compatibility](#compatibility)).
 - **An internet connection**: about 10 Mbps for 720p and 20 Mbps or more for 1080p. Wired or 5 GHz Wi-Fi is best.
 - **An Xbox account with a Game Pass plan that includes cloud gaming**, in a country where Xbox Cloud Gaming is offered.
 - **About 400 MB free** in `/userdata`, for the browser engine the installer downloads.
@@ -93,16 +93,19 @@ Forgot the PIN? Create a file named `reset-pin` in `/userdata/system/add-ons/xcl
 
 ## Compatibility
 
-Tested on 64-bit PCs with Batocera v42 and v44, and on HippOS 0.5. Elsewhere it depends on the processor, because the game stream is video it has to decode.
+**Tested:** 64-bit PCs with Batocera v42 and v44, and HippOS 0.5.
+
+Other devices haven't been fully tested yet. How well they do depends on the processor, because the game stream is video it has to decode. Based on their hardware:
 
 | | Devices |
 |---|---|
-| ✅ Plays well | PCs; PC handhelds (Steam Deck, ROG Ally, Legion Go); Raspberry Pi 5; RK3588 boards; Snapdragon handhelds (AYN Odin 2, Retroid Pocket 5) |
-| ⚠️ Works, may stutter | Raspberry Pi 4 (2 GB+); Odroid N2; RK3566 / RK3568 (Anbernic RG353 series); newer Amlogic TV boxes |
+| ✅ Tested | 64-bit PCs |
+| 🔸 Should play well (not fully tested) | PC handhelds (Steam Deck, ROG Ally, Legion Go); Raspberry Pi 5; RK3588 boards; Snapdragon handhelds (AYN Odin 2, Retroid Pocket 5) |
+| ⚠️ May stutter (not tested) | Raspberry Pi 4 (2 GB+); Odroid N2; RK3566 / RK3568 (Anbernic RG353 series); newer Amlogic TV boxes |
 | 🐢 Too slow | 1 GB devices (RG35XX family, RG351, Raspberry Pi 3) and 32-bit ARM |
 | ❌ Not supported | Raspberry Pi 1 / Zero (ARMv6) and 32-bit x86 PCs; the installer stops without changing anything |
 
-On ARM boards that stutter, try Settings → GPU acceleration.
+On ARM boards that stutter, try Settings → GPU acceleration. Tried it on one of these? Let us know how it went in an [issue](https://github.com/rmach89/xcloud-batocera-hippos/issues).
 
 ## Uninstall
 

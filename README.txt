@@ -39,8 +39,8 @@ What you get
 
 What you need
 -------------
-- Batocera or HippOS on a 64-bit PC, a 64-bit ARM device or 32-bit ARM
-  (see Compatibility).
+- Batocera or HippOS on a 64-bit PC (tested), or a PC handheld or ARM
+  device (not fully tested yet; see Compatibility).
 - An internet connection: about 20 Mbps, wired or 5 GHz Wi-Fi is best.
 - An Xbox account with a Game Pass plan that includes cloud gaming, in a
   country where Xbox Cloud Gaming is offered.
@@ -321,14 +321,15 @@ Installed a new theme? Run install.sh again to give it the logo.
 
 Compatibility
 -------------
-Tested: 64-bit PCs with Batocera v42 and v44, and HippOS 0.5. Elsewhere it
-depends on the processor, because the game stream is video it has to
-decode.
-  Plays well          PCs; PC handhelds (Steam Deck, ROG Ally, Legion Go);
-                      Raspberry Pi 5; RK3588 boards; Snapdragon handhelds
+Tested: 64-bit PCs with Batocera v42 and v44, and HippOS 0.5. Other
+devices haven't been fully tested yet; how well they do depends on the
+processor, because the game stream is video it has to decode.
+  Tested              64-bit PCs
+  Should play well    PC handhelds (Steam Deck, ROG Ally, Legion Go);
+  (not fully tested)  Raspberry Pi 5; RK3588 boards; Snapdragon handhelds
                       (AYN Odin 2, Retroid Pocket 5)
-  Works, may stutter  Raspberry Pi 4 (2 GB+); Odroid N2; RK3566 / RK3568
-                      (Anbernic RG353 series); newer Amlogic TV boxes
+  May stutter         Raspberry Pi 4 (2 GB+); Odroid N2; RK3566 / RK3568
+  (not tested)        (Anbernic RG353 series); newer Amlogic TV boxes
   Too slow            1 GB devices (RG35XX family, RG351, Raspberry Pi 3)
                       and 32-bit ARM
   Not supported       Raspberry Pi 1 / Zero (ARMv6) and 32-bit x86 PCs:
