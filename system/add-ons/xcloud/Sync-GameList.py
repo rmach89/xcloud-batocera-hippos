@@ -29,7 +29,7 @@ there, then the pictures come in; what's left goes to xcloud-app.log, and
 EmulationStation is asked to reload its games when it's finished. Two runs
 never overlap: a second one waits for the first.
 """
-import fcntl, json, os, re, shutil, sys, tempfile, time, urllib.parse, urllib.request
+import fcntl, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
@@ -464,6 +464,42 @@ def ours(g):
 
 BOX_VERSION = 7   # gamebox3d.VERSION, for when Pillow isn't here
 
+_converted = []
+def open_picture(path):
+    """A picture opened with Pillow. Some systems' Pillow can't decode Microsoft's
+    JPEGs ("broken data stream"): those are turned into a PNG with ffmpeg first."""
+    from PIL import Image
+    try:
+        if os.environ.get("XCLOUD_TEST_PIL_NO_JPEG") and path.lower().endswith(".jpg"):
+            raise OSError("broken data stream when reading image file (test)")
+        im = Image.open(path)
+        im.load()
+        return im
+    except Exception as e:
+        first = e
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        raise first
+    fd, tmp = tempfile.mkstemp(suffix=".png", prefix="xcloud-pic-")
+    os.close(fd)
+    try:
+        subprocess.run([ff, "-v", "error", "-y", "-i", path, "-frames:v", "1", tmp],
+                       check=True, timeout=60, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        im = Image.open(tmp)
+        im.load()
+    except Exception:
+        raise first
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    if not _converted:
+        _converted.append(1)
+        import PIL
+        emit(warning=f"Pillow {PIL.__version__} here can't read some of Microsoft's pictures ({first}); they're converted with ffmpeg for the boxes")
+    return im
+
 
 def cover_of(pid, d, got):
     """The picture a 3D box is drawn from: the tall cover (poster) when
@@ -519,9 +555,7 @@ def make_boxes(info, got, state):
 
     def cover(flat, url):
         try:
-            im = Image.open(flat)
-            im.load()
-            return im
+            return open_picture(flat)
         except Exception:
             if not url:
                 raise
@@ -530,9 +564,7 @@ def make_boxes(info, got, state):
         if ext_of(data) != os.path.splitext(flat)[1]:
             raise RuntimeError("Microsoft's copy isn't a picture in the same format")
         write_atomic(flat, data, binary=True)
-        im = Image.open(flat)
-        im.load()
-        return im
+        return open_picture(flat)
 
     def one(job):
         pid, title, flat, out, url, rating, feats = job
@@ -592,7 +624,7 @@ def make_flats(info, got, state):
             out[pid] = dst
             continue
         try:
-            img = gamebox3d.flat(Image.open(src), feats)
+            img = gamebox3d.flat(open_picture(src), feats)
             tmp = dst + ".tmp.jpg"
             img.save(tmp, quality=90)
             os.replace(tmp, dst)

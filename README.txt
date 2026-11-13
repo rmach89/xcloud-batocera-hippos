@@ -408,6 +408,9 @@ What's new in 1.2.0
   xcloud-app.log. A bar shows how far it has got, as a percentage.
 - Keyboard-and-mouse and touch badges on the covers of the games that
   support them, from Microsoft's own lists.
+- 3D game boxes are drawn for every game again on systems whose picture
+  library can't read Microsoft's covers ("broken data stream" in the
+  log): those covers are converted with ffmpeg first.
 - Turning the game list Off now deletes every picture it downloaded
   (also ones from an update that was cut short) and leaves only Xbox
   Cloud Gaming itself in the list.
