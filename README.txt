@@ -386,6 +386,8 @@ It asks first (and asks for the PIN when a child's profile exists).
   no need to restart it.
 To remove everything without questions:
   bash /userdata/system/add-ons/xcloud/uninstall.sh --all
+From BUA its questions appear on BUA's screen. The PIN can't be typed
+there, so when one is needed, use the F1 shortcut above instead.
 
 
 Troubleshooting
@@ -424,6 +426,11 @@ What's new in 1.2.5
 - On HippOS the installer asks nothing, so HippOS's content downloader
   can run it: Launch Single Game is left off and a newer release, if
   any, is installed.
+- From BUA (Batocera Unofficial Add-ons), the installer's and the
+  uninstaller's questions appear on BUA's own screen (yes / no and
+  menus). BUA can't take typed answers, so when a child's profile
+  needs the PIN, the uninstaller says to use F1 > Applications > Xbox
+  Cloud Gaming Uninstaller instead.
 
 What's new in 1.2.4
 -------------------

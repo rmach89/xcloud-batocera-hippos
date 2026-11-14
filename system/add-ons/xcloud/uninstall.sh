@@ -27,8 +27,12 @@ for arg in "$@"; do
 done
 
 say() { echo "[Xbox Cloud Gaming] $*"; }
+# Run from BUA (Batocera Unofficial Add-ons): its own "dialog" shows the
+# questions on BUA's screen (terminal prompts would wait unseen there)
+BUA=
+[ "$(type -t dialog 2>/dev/null)" = function ] && BUA=1
 finish() {   # finish <exit code>: in the menu's window, wait so you can read it
-    if [ "$FROM_MENU" = 1 ] && [ -t 0 ]; then
+    if [ "$FROM_MENU" = 1 ] && [ -z "$BUA" ] && [ -t 0 ]; then
         echo
         read -r -p "Press Enter to exit the uninstaller. " _
     fi
@@ -75,6 +79,14 @@ if [ -d "$FILES" ] && command -v python3 >/dev/null 2>&1 && child_here; then
         say "Nothing was changed."
         finish 1
     fi
+    if [ -n "$BUA" ]; then
+        # BUA can't take typed answers, so the PIN can't be entered there
+        dialog --title "Xbox Cloud Gaming" --msgbox "A child's or teen's profile is set up, so removing Xbox Cloud Gaming needs the adult PIN, which can't be typed here.
+
+Use F1 > Applications > Xbox Cloud Gaming Uninstaller instead. Nothing was changed." 0 0
+        say "Needs the PIN: use F1 > Applications > Xbox Cloud Gaming Uninstaller. Nothing was changed."
+        finish 1
+    fi
     if [ ! -t 0 ]; then
         say "Run this in a terminal to enter the PIN. Nothing was changed."
         finish 1
@@ -94,7 +106,10 @@ if [ -d "$FILES" ] && command -v python3 >/dev/null 2>&1 && child_here; then
 fi
 
 # --- are you sure? ---
-if [ "$ALL" != 1 ] && [ -t 0 ]; then
+if [ "$ALL" != 1 ] && [ -n "$BUA" ]; then
+    dialog --title "Xbox Cloud Gaming" --yesno "You are about to remove Xbox Cloud Gaming. Are you sure?" 0 0 \
+        || { say "Nothing was changed."; finish 0; }
+elif [ "$ALL" != 1 ] && [ -t 0 ]; then
     echo
     say "You are about to remove Xbox Cloud Gaming."
     read -r -p "Are you sure? [y/N] " a
@@ -119,6 +134,11 @@ launchsingle=keep
 if [ -f "$LS_ARM" ] || [ -f "$LS_LAUNCH" ]; then
     if [ "$ALL" = 1 ]; then
         launchsingle=remove
+    elif [ -n "$BUA" ]; then
+        dialog --title "Launch Single Game" --yesno "This package came with Launch Single Game, which opens a system's game straight away when that system has exactly one game.
+
+Keep Launch Single Game for your other systems?" 0 0 \
+            || launchsingle=remove
     elif [ -t 0 ]; then
         echo
         say "This package came with Launch Single Game, which opens a system's game"
@@ -193,6 +213,12 @@ if [ -d "$FILES" ]; then
     keep=1
     if [ "$ALL" = 1 ]; then
         keep=3
+    elif [ -n "$BUA" ]; then
+        a="$(dialog --stdout --title "Xbox Cloud Gaming" --menu "What should be kept for a later reinstall?" 0 0 0 \
+            1 "Keep everything: everyone's Xbox sign-ins, profiles, PIN and settings" \
+            2 "Remove the profiles (sign-ins, gamerpics and the PIN), keep the settings" \
+            3 "Remove everything" 2>/dev/null | head -n1)"
+        case "$a" in 2) keep=2 ;; 3) keep=3 ;; esac
     elif [ -t 0 ]; then
         echo
         say "What should be kept for a later reinstall?"
@@ -248,7 +274,9 @@ echo
 say "Done. Xbox Cloud Gaming has been removed."
 # EmulationStation reloads its systems and games by itself (the same as Main
 # Menu > Game settings > Update gamelists), so it leaves the carousel without a restart
-if command -v curl >/dev/null 2>&1; then
+if [ -n "$BUA" ]; then
+    say "BUA reloads EmulationStation when it's done."
+elif command -v curl >/dev/null 2>&1; then
     setsid bash -c "sleep 2; curl -s -m 10 http://127.0.0.1:1234/reloadgames" < /dev/null > /dev/null 2>&1 &
     say "EmulationStation updates its carousel in a moment."
 else

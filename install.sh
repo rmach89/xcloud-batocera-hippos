@@ -28,6 +28,14 @@ OS=batocera
 ASK=1
 [ "$OS" = hippos ] && ASK=''
 can_ask() { [ -n "$ASK" ] && [ -t 0 ]; }
+# Run from BUA (Batocera Unofficial Add-ons): BUA puts in its own "dialog"
+# that shows the question on its screen and hands back the answer. Plain
+# terminal prompts would wait unseen there, so questions go through dialog.
+BUA=
+[ "$(type -t dialog 2>/dev/null)" = function ] && BUA=1
+ask_bua() {   # ask_bua <title> <text>: yes / no on BUA's screen (0 = yes)
+    dialog --title "$1" --yesno "$2" 0 0
+}
 # on its own (no package next to it): the package comes from GitHub, below
 STANDALONE=
 [ -f "$ROOT/system/add-ons/xcloud/app.asar" ] || STANDALONE=1
@@ -86,7 +94,7 @@ if tag and zips:
     rm -rf "$DEST" && mv "$PKG" "$DEST" || { rm -rf "$TMPD"; fail "Couldn't put the package in $DEST."; }
     rm -rf "$TMPD"
     say "Unpacked v$REL_VER into $DEST. Running its installer..."
-    if [ -n "$ASK" ] && [ ! -t 0 ] && ( : < /dev/tty ) 2>/dev/null; then
+    if [ -n "$ASK" ] && [ -z "$BUA" ] && [ ! -t 0 ] && ( : < /dev/tty ) 2>/dev/null; then
         XCLOUD_NO_UPDATE_CHECK=1 bash "$DEST/install.sh" < /dev/tty
     else
         XCLOUD_NO_UPDATE_CHECK=1 bash "$DEST/install.sh"
@@ -107,7 +115,7 @@ newer_than() {   # is $1 a later version than $2?
 }
 if [ -z "$XCLOUD_NO_UPDATE_CHECK" ] && [ -n "$THIS_VERSION" ] && command -v curl >/dev/null 2>&1; then
     say "This package: v$THIS_VERSION. Checking GitHub for a newer version..."
-    latest_json="$(curl -fsSL -m 15 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null)"
+    latest_json="$(curl -fsSL -m 15 -H 'Accept: application/vnd.github+json' "${XCLOUD_RELEASE_API:-https://api.github.com/repos/$REPO/releases/latest}" 2>/dev/null)"
     read -r LATEST LATEST_ZIP < <(printf '%s' "$latest_json" | python3 -c '
 import json, sys
 try:
@@ -125,6 +133,9 @@ if tag and zips:
         say "A newer version is out: v$LATEST (this package is v$THIS_VERSION)."
         GET="${XCLOUD_UPDATE:-}"
         [ -z "$GET" ] && [ "$OS" = hippos ] && GET=yes   # nothing asked on HippOS: the newer one
+        if [ -z "$GET" ] && [ -n "$BUA" ] && [ -n "$ASK" ]; then
+            if ask_bua "Xbox Cloud Gaming" "A newer version is out: v$LATEST (this package is v$THIS_VERSION). Download and install v$LATEST instead?"; then GET=yes; else GET=no; fi
+        fi
         if [ -z "$GET" ]; then
             if can_ask; then
                 read -r -p "Download and install v$LATEST instead? [Y/n] " a
@@ -196,6 +207,10 @@ if [ -z "$SINGLE" ]; then
         # nothing asked on HippOS: no Launch Single Game (XCLOUD_SINGLE_LAUNCH=yes adds it)
         SINGLE=no
         say "HippOS: Launch Single Game is left off (XCLOUD_SINGLE_LAUNCH=yes bash install.sh adds it)."
+    elif [ -n "$BUA" ]; then
+        if ask_bua "Launch Single Game (optional)" "With it, picking Xbox Cloud Gaming in the carousel opens the app straight away, and closing the app takes you back to the carousel. Without it, you see Xbox Cloud Gaming's list first and press A on it. It only acts on Xbox Cloud Gaming; your other systems behave as before. Xbox Cloud Gaming works the same either way.
+
+Install Launch Single Game?"; then SINGLE=yes; else SINGLE=no; fi
     elif can_ask; then
         cat <<'SINGLE_EOF'
 
@@ -269,7 +284,7 @@ fi
 
 echo
 say "Done. Xbox Cloud Gaming appears in the carousel after EmulationStation restarts."
-if can_ask; then
+if [ -z "$BUA" ] && can_ask; then
     say "To see it, restart EmulationStation from Main Menu > Quit > Restart EmulationStation."
     read -r -p "Press Enter to exit the installer. " _
 fi

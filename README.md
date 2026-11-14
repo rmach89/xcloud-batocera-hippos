@@ -43,7 +43,7 @@ There are four ways to install it. All of them get the newest release from here.
 
 ### From BUA (Batocera Unofficial Add-ons)
 
-Xbox Cloud Gaming is now in **BUA**. Open BUA on your Batocera, pick **Xbox Cloud Gaming** from its list and install it. BUA runs this project's installer, which downloads the newest release from here, so there's nothing else to download. Answer the installer's questions, then restart EmulationStation.
+Xbox Cloud Gaming is now in **BUA**. Open BUA on your Batocera, pick **Xbox Cloud Gaming** from its list and install it. BUA runs this project's installer, which downloads the newest release from here, so there's nothing else to download. The installer's questions appear on BUA's screen; answer them, then restart EmulationStation.
 
 ### From the HippOS content downloader
 
@@ -137,7 +137,7 @@ F1 → Applications → **Xbox Cloud Gaming Uninstaller**, or:
 bash /userdata/system/add-ons/xcloud/uninstall.sh
 ```
 
-It asks before removing anything, and can keep everyone's sign-ins and profiles for a reinstall. When it's done, press Enter to exit; EmulationStation reloads by itself. To remove everything without questions, add `--all`.
+It asks before removing anything, and can keep everyone's sign-ins and profiles for a reinstall. When it's done, press Enter to exit; EmulationStation reloads by itself. To remove everything without questions, add `--all`. From BUA, its questions appear on BUA's screen; if a child's profile needs the PIN, use the F1 shortcut instead, since BUA can't take typed answers.
 
 ## Help
 
