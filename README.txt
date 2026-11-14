@@ -303,8 +303,11 @@ Launch Single Game
 Optional; the installer asks. With it, picking Xbox Cloud Gaming in the
 carousel opens the app straight away, and closing the app returns to the
 carousel. Without it, the carousel opens Xbox Cloud Gaming's list like
-any other system. It's off unless you choose it, on Batocera and
-HippOS alike; installing again keeps what you chose before.
+any other system. It's off unless you choose it, on Batocera and HippOS
+alike; installing again keeps what you chose before. On HippOS the
+installer asks nothing (its content downloader can't answer questions):
+Launch Single Game is left off, and XCLOUD_SINGLE_LAUNCH=yes bash
+install.sh adds it.
 
 It only acts on systems listed in /userdata/system/launchsingle.systems
 (one per line; the installer adds xcloud). Add another system's short
@@ -418,6 +421,9 @@ What's new in 1.2.5
   downloads the newest release from GitHub into /userdata/Xbox Cloud
   Gaming and installs that (see Install and update). With the zip it
   works as before.
+- On HippOS the installer asks nothing, so HippOS's content downloader
+  can run it: Launch Single Game is left off and a newer release, if
+  any, is installed.
 
 What's new in 1.2.4
 -------------------

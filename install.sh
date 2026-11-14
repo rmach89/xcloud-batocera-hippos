@@ -23,6 +23,11 @@ fail() { echo "[Xbox Cloud Gaming] ERROR: $*" >&2; exit 1; }
 [ -d "$USERDATA/system" ] || fail "This must be run on Batocera or HippOS ($USERDATA/system not found)."
 OS=batocera
 [ -f "${XCLOUD_HIPPOS_VERSION:-/usr/share/hippos/version}" ] && OS=hippos
+# On HippOS the installer asks nothing (its content downloader can't answer):
+# Launch Single Game is left off and a newer release, if any, is installed.
+ASK=1
+[ "$OS" = hippos ] && ASK=''
+can_ask() { [ -n "$ASK" ] && [ -t 0 ]; }
 # on its own (no package next to it): the package comes from GitHub, below
 STANDALONE=
 [ -f "$ROOT/system/add-ons/xcloud/app.asar" ] || STANDALONE=1
@@ -81,7 +86,7 @@ if tag and zips:
     rm -rf "$DEST" && mv "$PKG" "$DEST" || { rm -rf "$TMPD"; fail "Couldn't put the package in $DEST."; }
     rm -rf "$TMPD"
     say "Unpacked v$REL_VER into $DEST. Running its installer..."
-    if [ ! -t 0 ] && ( : < /dev/tty ) 2>/dev/null; then
+    if [ -n "$ASK" ] && [ ! -t 0 ] && ( : < /dev/tty ) 2>/dev/null; then
         XCLOUD_NO_UPDATE_CHECK=1 bash "$DEST/install.sh" < /dev/tty
     else
         XCLOUD_NO_UPDATE_CHECK=1 bash "$DEST/install.sh"
@@ -119,8 +124,9 @@ if tag and zips:
     elif newer_than "$LATEST" "$THIS_VERSION"; then
         say "A newer version is out: v$LATEST (this package is v$THIS_VERSION)."
         GET="${XCLOUD_UPDATE:-}"
+        [ -z "$GET" ] && [ "$OS" = hippos ] && GET=yes   # nothing asked on HippOS: the newer one
         if [ -z "$GET" ]; then
-            if [ -t 0 ]; then
+            if can_ask; then
                 read -r -p "Download and install v$LATEST instead? [Y/n] " a
                 case "$a" in n|N|no|NO) GET=no ;; *) GET=yes ;; esac
             else
@@ -186,7 +192,11 @@ if [ -z "$SINGLE" ]; then
     # keeps what you chose before (xcloud already in launchsingle.systems).
     SINGLE=no
     tr -d '\r' 2>/dev/null < "$USERDATA/system/launchsingle.systems" | grep -qx '[[:space:]]*xcloud[[:space:]]*' && SINGLE=yes
-    if [ -t 0 ]; then
+    if [ "$OS" = hippos ]; then
+        # nothing asked on HippOS: no Launch Single Game (XCLOUD_SINGLE_LAUNCH=yes adds it)
+        SINGLE=no
+        say "HippOS: Launch Single Game is left off (XCLOUD_SINGLE_LAUNCH=yes bash install.sh adds it)."
+    elif can_ask; then
         cat <<'SINGLE_EOF'
 
 ------------------------------------------------------------------------
@@ -259,7 +269,7 @@ fi
 
 echo
 say "Done. Xbox Cloud Gaming appears in the carousel after EmulationStation restarts."
-if [ -t 0 ]; then
+if can_ask; then
     say "To see it, restart EmulationStation from Main Menu > Quit > Restart EmulationStation."
     read -r -p "Press Enter to exit the installer. " _
 fi
