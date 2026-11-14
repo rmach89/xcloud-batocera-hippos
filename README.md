@@ -49,6 +49,13 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 
 The installer checks this repository first. If a newer release is out, it offers to download and install that one instead.
 
+**Or with just the installer:** `install.sh` also works on its own. With nothing else next to it, it downloads the newest release from here, unpacks it into `/userdata/Xbox Cloud Gaming` and installs it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
+bash /tmp/xcloud-install.sh
+```
+
 ## Updating
 
 - **From the app:** Settings → Help and maintenance → **Updates**. One press checks for a newer app and a newer browser engine, and downloads whichever is newer. The new version is installed when you close the app, and your sign-ins, profiles, settings and picked games are kept. If anything fails, nothing changes, and the log says why.

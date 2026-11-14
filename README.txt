@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.4 (November 2026)
+Version 1.2.5 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -56,6 +56,12 @@ Install and update
      bash "/userdata/Xbox Cloud Gaming/install.sh"
 3. Answer its questions, then restart EmulationStation
    (Main Menu > Quit > Restart EmulationStation).
+
+Or with just the installer: install.sh also works on its own, with
+nothing else next to it. It then downloads the newest release from
+GitHub, unpacks it into /userdata/Xbox Cloud Gaming and installs it:
+  curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
+  bash /tmp/xcloud-install.sh
 
 Before installing, the installer checks GitHub for a newer version and
 offers to download and install it instead (Enter = yes). With no
@@ -404,6 +410,13 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.5
+-------------------
+- install.sh works on its own: with nothing else next to it, it
+  downloads the newest release from GitHub into /userdata/Xbox Cloud
+  Gaming and installs that (see Install and update). With the zip it
+  works as before.
 
 What's new in 1.2.4
 -------------------
