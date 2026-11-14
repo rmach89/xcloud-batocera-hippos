@@ -2,7 +2,7 @@
 
 Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](https://batocera.org) and [HippOS](https://hippos-linux.org). Pick it, and a fullscreen app opens on [play.xbox.com](https://play.xbox.com), ready for your controller. Your cloud games can sit in EmulationStation's list like any other system, with box art, 3D cases and age ratings.
 
-**[⬇ Download the latest release](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)** · also available in **BUA** (Batocera Unofficial Add-ons)
+**[⬇ Download the latest release](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)** · also available in **BUA** (Batocera Unofficial Add-ons) and the **HippOS content downloader**
 
 > **Unofficial project, use at your own risk.** Not affiliated with, endorsed by or sponsored by Microsoft or Xbox. Xbox, Xbox Cloud Gaming and Xbox Game Pass are trademarks of the Microsoft group of companies.
 
@@ -39,11 +39,15 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 
 ## Install
 
-There are three ways to install it. All three get the newest release from here.
+There are four ways to install it. All of them get the newest release from here.
 
 ### From BUA (Batocera Unofficial Add-ons)
 
 Xbox Cloud Gaming is now in **BUA**. Open BUA on your Batocera, pick **Xbox Cloud Gaming** from its list and install it. BUA runs this project's installer, which downloads the newest release from here, so there's nothing else to download. Answer the installer's questions, then restart EmulationStation.
+
+### From the HippOS content downloader
+
+On HippOS, Xbox Cloud Gaming is in the **content downloader**. Pick **Xbox Cloud Gaming** there and install it. It gets the newest release from here, then answer the installer's questions and restart EmulationStation.
 
 ### From the zip
 
