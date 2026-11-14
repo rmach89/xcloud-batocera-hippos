@@ -39,8 +39,8 @@ What you get
 
 What you need
 -------------
-- Batocera or HippOS on a 64-bit PC (tested), or a PC handheld or ARM
-  device (not fully tested yet; see Compatibility).
+- Batocera or HippOS on a 64-bit PC or a Steam Deck (tested), or another
+  PC handheld or ARM device (not fully tested yet; see Compatibility).
 - An internet connection: about 20 Mbps, wired or 5 GHz Wi-Fi is best.
 - An Xbox account with a Game Pass plan that includes cloud gaming, in a
   country where Xbox Cloud Gaming is offered.
@@ -334,11 +334,12 @@ Installed a new theme? Run install.sh again to give it the logo.
 
 Compatibility
 -------------
-Tested: 64-bit PCs with Batocera v42 and v44, and HippOS 0.5. Other
-devices haven't been fully tested yet; how well they do depends on the
-processor, because the game stream is video it has to decode.
-  Tested              64-bit PCs
-  Should play well    PC handhelds (Steam Deck, ROG Ally, Legion Go);
+Tested: 64-bit PCs with Batocera v42 and v44, and HippOS 0.5; the Steam
+Deck, including its built-in controls. Other devices haven't been fully
+tested yet; how well they do depends on the processor, because the game
+stream is video it has to decode.
+  Tested              64-bit PCs; Steam Deck
+  Should play well    other PC handhelds (ROG Ally, Legion Go);
   (not fully tested)  Raspberry Pi 5; RK3588 boards; Snapdragon handhelds
                       (AYN Odin 2, Retroid Pocket 5)
   May stutter         Raspberry Pi 4 (2 GB+); Odroid N2; RK3566 / RK3568
