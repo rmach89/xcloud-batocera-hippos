@@ -12,7 +12,14 @@
 # engine), Launch Single Game if you want it (it asks), and the shortcuts in
 # F1 > Applications.
 # Nothing goes in the Ports menu.
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+# The package folder is the one this script is in. Piped in (curl ... | bash)
+# it isn't in any folder, so it downloads the package (standalone, below)
+# rather than taking whatever folder it happens to be run from.
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+    ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    ROOT=/nonexistent
+fi
 USERDATA=/userdata
 FILES=$USERDATA/system/add-ons/xcloud
 LOGDIR=$USERDATA/system/logs
