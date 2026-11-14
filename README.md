@@ -2,7 +2,7 @@
 
 Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](https://batocera.org) and [HippOS](https://hippos-linux.org). Pick it, and a fullscreen app opens on [play.xbox.com](https://play.xbox.com), ready for your controller. Your cloud games can sit in EmulationStation's list like any other system, with box art, 3D cases and age ratings.
 
-**[⬇ Download the latest release](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)**
+**[⬇ Download the latest release](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)** · also available in **BUA** (Batocera Unofficial Add-ons)
 
 > **Unofficial project, use at your own risk.** Not affiliated with, endorsed by or sponsored by Microsoft or Xbox. Xbox, Xbox Cloud Gaming and Xbox Game Pass are trademarks of the Microsoft group of companies.
 
@@ -39,6 +39,14 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 
 ## Install
 
+There are three ways to install it. All three get the newest release from here.
+
+### From BUA (Batocera Unofficial Add-ons)
+
+Xbox Cloud Gaming is now in **BUA**. Open BUA on your Batocera, pick **Xbox Cloud Gaming** from its list and install it. BUA runs this project's installer, which downloads the newest release from here, so there's nothing else to download. Answer the installer's questions, then restart EmulationStation.
+
+### From the zip
+
 1. Download the newest zip from **[Releases](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)**.
 2. Unzip it into the share folder (`/userdata`, called "share" on the network). That gives you `/userdata/Xbox Cloud Gaming`.
 3. Open a terminal (on Batocera, F1 → Applications → xterm; or SSH in) and run:
@@ -49,7 +57,9 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 
 The installer checks this repository first. If a newer release is out, it offers to download and install that one instead.
 
-**Or with just the installer:** `install.sh` also works on its own. With nothing else next to it, it downloads the newest release from here, unpacks it into `/userdata/Xbox Cloud Gaming` and installs it:
+### With just the installer
+
+`install.sh` also works on its own. With nothing else next to it, it downloads the newest release from here, unpacks it into `/userdata/Xbox Cloud Gaming` and installs it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
