@@ -3397,7 +3397,7 @@ function createWindow() {
 
 function preloadText() {
   const L = cfg.language;
-  const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone'];
+  const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone', 'rowHint'];
   const text = Object.fromEntries(keys.map(k => [k, i18n.t(L, k)]));
   // the Japanese / Korean letters, for the keyboard and messages on the Xbox page
   return { lang: L, text, fontCss: L === 'ja' || L === 'ko' ? i18n.FONT_CSS : '', fontStack: i18n.FONT_STACK };
@@ -3489,6 +3489,17 @@ ipcMain.on('xcloud-home', event => {
 ipcMain.on('xcloud-quit', () => fastExit('controller, exit buttons held'));
 ipcMain.on('xcloud-retry', event => { log('retry from the "can\'t connect" screen (controller)'); openStart(event.sender); });
 ipcMain.on('xcloud-continue', (event, opts) => doContinue(event.sender, !!(opts && opts.never), 'controller'));
+// the dashboard's "Hold View: open <row>" hint: shown the first few times
+// only, and never again once a row has been opened that way
+const ROW_HINT_FILE = path.join(HOME, 'row-hint-count'), ROW_HINT_MAX = 5;
+function rowHintCount() { try { return parseInt(fs.readFileSync(ROW_HINT_FILE, 'utf8'), 10) || 0; } catch (e) { return 0; } }
+ipcMain.on('xcloud-row-hint', event => {
+  const n = rowHintCount();
+  if (n >= ROW_HINT_MAX) { event.returnValue = false; return; }
+  try { fs.writeFileSync(ROW_HINT_FILE, String(n + 1)); } catch (e) { /* ignore */ }
+  event.returnValue = true;
+});
+ipcMain.on('xcloud-row-used', () => { try { fs.writeFileSync(ROW_HINT_FILE, String(ROW_HINT_MAX)); } catch (e) { /* ignore */ } });
 ipcMain.on('xcloud-log', (event, msg) => log(String(msg).slice(0, 3000)));
 
 app.on('second-instance', () => {

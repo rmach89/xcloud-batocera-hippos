@@ -100,7 +100,10 @@ opens Settings directly.
 
 A whole row of games: Xbox's controller navigation skips the row titles
 ("Stream for free with ads >"). Hold View (Share / Select) for 1 second
-on a game in the row to open its full list.
+on a game in the row to open its full list. The first few times you move
+onto a row with the controller, a hint at the bottom names it ("Hold View
+to open Stream for free with ads"); once you've opened a row this way,
+or after five hints, it stops.
 
 Intro video: plays while Xbox loads behind it. A, B, X, Menu, Enter or
 Space skip it. Settings > Intro video: every time, once a day, or off.
@@ -232,7 +235,7 @@ a few minutes the first time (hundreds of pictures, and the 3D boxes):
 the games show first and their pictures follow. You can close the app
 meanwhile; it finishes in the background and EmulationStation reloads
 its games when it's done. While it runs, a bar with the percentage shows
-in the top-right corner of the dashboard and under the setting in
+in the bottom-left corner of the dashboard and under the setting in
 Settings.
 
 3D game boxes: each game becomes a black case with the cover, the
@@ -431,6 +434,14 @@ What's new in 1.2.5
   menus). BUA can't take typed answers, so when a child's profile
   needs the PIN, the uninstaller says to use F1 > Applications > Xbox
   Cloud Gaming Uninstaller instead.
+- Holding View on a game to open its whole row finds the row's title by
+  where it sits on screen (just above the row), so it works with how the
+  Xbox dashboard is built now. A hint at the bottom shows it the first
+  few times you move onto a row with the controller.
+- The game list's progress bar is in the bottom-left corner of the
+  dashboard (it was top right).
+- When run straight from GitHub (curl ... | bash), install.sh always
+  downloads the newest release, whatever folder it's started from.
 
 What's new in 1.2.4
 -------------------

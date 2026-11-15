@@ -202,6 +202,12 @@ function homeLabel() {
   const view = PAD_STYLES[padStyle(id)].k1[1];
   return fill(TXT.homeHint, { view });
 }
+function viewLabel() {
+  let id = '';
+  try { const pad = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).find(p => p && p.connected !== false); id = pad ? pad.id : ''; } catch (e) { id = ''; }
+  if (!id) { try { id = ipcRenderer.sendSync('xcloud-last-pad') || ''; } catch (e) { id = ''; } }
+  return PAD_STYLES[padStyle(id)].k1[1];
+}
 function showHome() {
   if (!ON_WEB_PAGE || homeEl || !document.body) return;
   homeEl = document.createElement('div');
@@ -487,7 +493,7 @@ function toast(msg, ms) {
 ipcRenderer.on('xcloud-toast', (e, msg, ms) => toast(msg, ms));
 
 // the EmulationStation game list update: a small bar with the percentage in
-// the top-right corner of the dashboard until it's done (pct null hides it).
+// the bottom-left corner of the dashboard until it's done (pct null hides it).
 // Not shown over a game in full screen.
 let glEl = null;
 ipcRenderer.on('xcloud-glprogress', (e, pct, text) => whenBody(() => {
@@ -496,7 +502,7 @@ ipcRenderer.on('xcloud-glprogress', (e, pct, text) => whenBody(() => {
     glEl = document.createElement('div');
     glEl.setAttribute('data-xcloud', 'glprogress');
     Object.assign(glEl.style, {
-      position: 'fixed', top: '18px', right: '22px', zIndex: '2147483646', pointerEvents: 'none',
+      position: 'fixed', bottom: '22px', left: '22px', zIndex: '2147483646', pointerEvents: 'none',
       background: 'rgba(16,16,16,0.9)', border: `2px solid ${GREEN}`, borderRadius: '10px',
       padding: '10px 16px', color: '#fff', font: `600 16px ${FONT_STACK}`, minWidth: '300px'
     });
@@ -680,44 +686,70 @@ function checkRowHold(s) {
     if (!rowDone && !rowSpoiled && Date.now() - rowStart >= ROW_HOLD_MS) { rowDone = true; openRow(); }
   } else { rowStart = 0; rowDone = false; rowSpoiled = false; }
 }
-// the row's title for a tile: on the Xbox site each row is a <section> whose
-// heading (often a link, "Stream for free with ads >") comes before its
-// carousel of game buttons. Only that section is searched, so another row's
-// title is never picked.
-function rowTitleFor(tile) {
-  const sec = tile.closest('section');
-  if (sec) {
-    const before = el => !!(el.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING);
-    const isTile = el => !!el.querySelector('img,video,picture') || el.contains(tile) || tile.contains(el);
-    // a link or button before the games, with a short text and no picture
-    for (const c of sec.querySelectorAll('a[href],button,[role=link],[role=button]')) {
-      if (!before(c) || isTile(c) || !visible(c)) continue;
-      const txt = (c.textContent || '').trim();
-      if (txt && txt.length <= 80) return c;
-    }
-    // or the heading itself, clicked through whatever it sits in
-    for (const h of sec.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading]')) {
-      if (!before(h) || !visible(h) || !(h.textContent || '').trim()) continue;
-      return h.querySelector('a,button,[role=link],[role=button]') || h.closest('a,button,[role=link],[role=button]') || h;
-    }
-  }
-  // no section: the nearest short link or button just above the tile
+// the row's title for a tile, found by where it is on screen rather than by
+// how the page is built: the nearest text just above the tile's row, below
+// any games of the row above (so another row's title is never picked). Some
+// titles are plain text with the click handled further up, so the text
+// itself is returned and clicked.
+const TILE_SEL = 'a[href],button,[role=link],[role=button]';
+function isTileEl(el) { return !!(el && el.matches && el.matches(TILE_SEL) && el.querySelector('img,picture,video')); }
+function rowTitleCandidates(tile) {
   const tr = tile.getBoundingClientRect();
-  for (let a = tile.parentElement, depth = 0; a && a !== document.body && depth < 6; a = a.parentElement, depth++) {
-    let best = null, bestGap = Infinity;
-    for (const c of a.querySelectorAll('a[href],button,[role=link],[role=button]')) {
-      if (c === tile || c.contains(tile) || tile.contains(c) || !visible(c)) continue;
-      if (c.querySelector('img,video,picture')) continue;
-      const txt = (c.textContent || '').trim();
-      if (!txt || txt.length > 80) continue;
-      const r = c.getBoundingClientRect();
-      if (r.height > 80 || r.bottom > tr.top + 4) continue;
-      const gap = tr.top - r.bottom;
-      if (gap <= 120 && gap < bestGap) { best = c; bestGap = gap; }
-    }
-    if (best) return best;
+  // the bottom of the row above: the lowest game (or picture) that ends above this tile
+  // (the games of this row itself don't count: the nearest box holding two or more games)
+  let rowBox = null;
+  for (let a = tile.parentElement, i = 0; a && a !== document.body && i < 4; a = a.parentElement, i++) {
+    if (Array.from(a.querySelectorAll(TILE_SEL)).filter(isTileEl).length >= 2) { rowBox = a; break; }
   }
-  return null;
+  let ceiling = -Infinity;
+  for (const im of document.querySelectorAll('img,picture,video,' + TILE_SEL)) {
+    if (im === tile || tile.contains(im) || im.contains(tile) || im.closest('[data-xcloud]')) continue;
+    if (rowBox && rowBox.contains(im)) continue;
+    if (!/^(IMG|PICTURE|VIDEO)$/.test(im.tagName) && !isTileEl(im)) continue;
+    const r = im.getBoundingClientRect();
+    if (r.width < 40 || r.height < 40) continue;
+    if (r.bottom <= tr.top + 4 && r.bottom > ceiling) ceiling = r.bottom;
+  }
+  const out = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const seen = new Set();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const txt = n.textContent.trim();
+    if (!txt) continue;
+    const el = n.parentElement;
+    if (!el || seen.has(el) || el.closest('[data-xcloud],script,style,noscript')) continue;
+    seen.add(el);
+    if (tile.contains(el) || el.closest(TILE_SEL) && isTileEl(el.closest(TILE_SEL))) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.height > 80) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || +st.opacity === 0) continue;
+    if (r.bottom > tr.top + 4 || r.top < ceiling - 4) continue;      // between the rows
+    const gap = tr.top - r.bottom;
+    if (gap > 400 || r.left > tr.right) continue;                     // above, starting left of the tile's end
+    out.push({ el, gap, txt: el.textContent.trim().replace(/\s+/g, ' ').slice(0, 80) });
+  }
+  // nearest first; on the same line, the leftmost (the title, not "See all" or a count)
+  out.sort((a, b) => (Math.round(a.gap / 8) - Math.round(b.gap / 8)) || (a.el.getBoundingClientRect().left - b.el.getBoundingClientRect().left));
+  return out;
+}
+function rowTitleFor(tile) {
+  const c = rowTitleCandidates(tile);
+  if (!c.length) return null;
+  // a link or button on that line (often the title itself, or its ">") beats plain text
+  const line = c.filter(x => Math.abs(x.gap - c[0].gap) < 12);
+  for (const x of line) { const a = x.el.closest(TILE_SEL); if (a && !isTileEl(a)) return a; }
+  return c[0].el;
+}
+// click like a person would: some pages only listen for pointer or mouse events
+function pressEl(el) {
+  const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width / 2, 20), y = r.top + r.height / 2;
+  const o = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, view: window };
+  try { el.dispatchEvent(new PointerEvent('pointerdown', { ...o, pointerType: 'mouse', isPrimary: true })); } catch (e) { /* ignore */ }
+  el.dispatchEvent(new MouseEvent('mousedown', o));
+  try { el.dispatchEvent(new PointerEvent('pointerup', { ...o, pointerType: 'mouse', isPrimary: true })); } catch (e) { /* ignore */ }
+  el.dispatchEvent(new MouseEvent('mouseup', o));
+  el.click();
 }
 // what a row's section holds before its games, for the log when no title is found
 function sectionSummary(tile) {
@@ -753,22 +785,59 @@ function outline(tile) {
   })(box, 0);
   return out.join(' | ');
 }
+// the hint: moving onto a game in a row that has a title (with the
+// controller) shows "Hold View: open <row>" for a few seconds, once per row.
+// Only the first few times; it stops for good once a row has been opened
+// this way (main.js keeps count).
+const ROW_HINT_MS = 4500;
+let rowHintTimer = null, rowHintLast = null;
+function rowName(t) { return (t.textContent || '').trim().replace(/\s+/g, ' ').replace(/\s*[\u203a>]+$/, '').slice(0, 60); }
+function maybeRowHint(tile) {
+  clearTimeout(rowHintTimer);
+  if (!TXT.rowHint) return;
+  rowHintTimer = setTimeout(() => {
+    try {
+      if (document.activeElement !== tile || OVERLAY_UP || osk.isOpen || Date.now() - lastPadMove > 3000) return;
+      const t = rowTitleFor(tile);
+      if (!t || t === rowHintLast) return;
+      const row = rowName(t);
+      if (!row) return;
+      if (!ipcRenderer.sendSync('xcloud-row-hint')) return;
+      rowHintLast = t;
+      appLog(`row hint: "${row}"`);
+      toast(fill(TXT.rowHint, { view: viewLabel(), row }), ROW_HINT_MS);
+    } catch (e) { /* ignore */ }
+  }, 700);
+}
+if (ON_DASH) {
+  document.addEventListener('focusin', e => { if (isTileEl(e.target)) maybeRowHint(e.target); }, true);
+}
 function openRow() {
   const tile = document.activeElement;
   if (!tile || tile === document.body || tile === document.documentElement) { appLog('View held: no game selected, so no row to open'); return; }
   const t = rowTitleFor(tile);
   if (!t) {
     const up = []; for (let a = tile.parentElement, i = 0; a && i < 5; a = a.parentElement, i++) up.push(describe(a));
+    try { const f = tile.getBoundingClientRect(); appLog(`View held: tile at ${Math.round(f.left)},${Math.round(f.top)}`); } catch (e) { /* ignore */ }
     appLog(`View held: no row title found above ${describe(tile)} (in ${up.join(' < ')}); the section has: ${sectionSummary(tile)}`);
     try { appLog('View held: page outline: ' + outline(tile)); } catch (e) { /* ignore */ }
     toast(TXT.rowNone || 'This row has no full list', 2500);
     return;
   }
-  const name = (t.textContent || '').trim().replace(/\s+/g, ' ');
+  const name = (t.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  try { appLog('View held: candidates: ' + rowTitleCandidates(tile).slice(0, 4).map(x => `"${x.txt}" ${describe(x.el)} ${Math.round(x.gap)}px`).join(' / ')); } catch (e) { /* ignore */ }
   try { appLog('View held: page outline: ' + outline(tile)); } catch (e) { /* ignore */ }
   appLog(`View held: opening the row "${name}" (${describe(t)}) for ${describe(tile)}`);
   toast('\u203a ' + name, 2000);
-  t.click();
+  try { ipcRenderer.send('xcloud-row-used'); } catch (e) { /* ignore */ }
+  const before = location.href;
+  pressEl(t);
+  // nothing happened? its clickable container, if any, then a link inside the line
+  setTimeout(() => {
+    if (location.href !== before) return;
+    const up = t.parentElement && t.parentElement.closest(TILE_SEL);
+    if (up && !isTileEl(up)) { appLog('View held: no change, pressing ' + describe(up)); pressEl(up); }
+  }, 700);
 }
 
 // ---------- focus navigation for sign-in pages ----------
@@ -1240,7 +1309,9 @@ function anySearchBox() {
   return all.find(x => /search|such|cerca|buscar|pesquis|recherch|zoek|sök|søg|hae|szuk|hled|vyhľad|keres|検索|검색/i.test(
     `${x.type} ${x.getAttribute('aria-label') || ''} ${x.placeholder || ''} ${x.name || ''} ${x.id || ''}`)) || all[0] || null;
 }
+let lastPadMove = 0;   // any controller press on the dashboard (for the row hint)
 function dashPress(b) {
+  lastPadMove = Date.now();
   if (b === BTN.A || b === BTN.X) lastPadPress = Date.now();   // only a press that picks something opens the keyboard
   if (osk.isOpen) {
     if (b === BTN.UP) osk.move(-1, 0);
