@@ -49,6 +49,7 @@ function setText(i) {
     if (document.documentElement) add(); else document.addEventListener('DOMContentLoaded', add);
   }
 }
+let TOUCH_ON = false;   // the on-screen touch controller (Settings)
 let STREAM_JS = '';   // the stream options (resolution, sharpening, stats, vibration), from the app
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
 try {
@@ -59,6 +60,7 @@ try {
   if (Number.isFinite(c.volume)) VOLUME = Math.min(100, Math.max(0, c.volume));
   setText(c.i18n);
   STREAM_JS = c.stream || '';
+  TOUCH_ON = c.touch === true;
 } catch (e) { /* use defaults */ }
 
 const ON_XBOX = /(^|\.)xbox\.com$/i.test(location.hostname);
@@ -516,6 +518,90 @@ ipcRenderer.on('xcloud-glprogress', (e, pct, text) => whenBody(() => {
   glEl.querySelector('[data-p]').textContent = pct + '%';
   glEl.querySelector('[data-f]').style.width = pct + '%';
 }));
+
+// ---------- on-screen touch controller ----------
+// See-through controller buttons over a game while it streams (Settings >
+// On-screen touch controller). The Xbox page gets them as one more Xbox
+// controller (main.js reads data-xcloud-vpad), from the first touch on.
+// Buttons: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 View, 9 Menu,
+// 10 L3, 11 R3, 12-15 d-pad up down left right.
+ipcRenderer.on('xcloud-touch', (e, on) => { TOUCH_ON = !!on; touchCheck(); });
+const TP = { el: null, btn: new Array(17).fill(0), ax: [0, 0, 0, 0], live: false, owners: {} };
+const TP_CSS = `
+  #xcloud-touch{position:fixed;inset:0;z-index:2147483600;pointer-events:none;font-family:${FONT_STACK};user-select:none}
+  #xcloud-touch .b,#xcloud-touch .stick{position:absolute;pointer-events:auto;touch-action:none;transform:translate(-50%,-50%);
+    background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.42);color:rgba(255,255,255,.85);
+    display:flex;align-items:center;justify-content:center;font-weight:700;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  #xcloud-touch .b{border-radius:50%;width:9vmin;height:9vmin;font-size:3.6vmin}
+  #xcloud-touch .b.sh{border-radius:2.2vmin;width:12vmin;height:6vmin;font-size:2.8vmin}
+  #xcloud-touch .b.sm{width:7vmin;height:7vmin;font-size:2.4vmin}
+  #xcloud-touch .b.on{background:rgba(255,255,255,.38)}
+  #xcloud-touch .stick{border-radius:50%;width:24vmin;height:24vmin}
+  #xcloud-touch .knob{width:10vmin;height:10vmin;border-radius:50%;background:rgba(255,255,255,.30);border:2px solid rgba(255,255,255,.55);pointer-events:none}
+  #xcloud-touch .A{color:#7fd16f}#xcloud-touch .B{color:#ff7b72}#xcloud-touch .X{color:#6cb6ff}#xcloud-touch .Y{color:#ffd866}`;
+// [label, button index, x %, y %, extra class]
+const TP_BUTTONS = [
+  ['A', 0, 87, 74, 'A'], ['B', 1, 94, 61, 'B'], ['X', 2, 80, 61, 'X'], ['Y', 3, 87, 48, 'Y'],
+  ['LB', 4, 17, 10, 'sh'], ['RB', 5, 83, 10, 'sh'], ['LT', 6, 6, 10, 'sh'], ['RT', 7, 94, 10, 'sh'],
+  ['\u29c9', 8, 44, 8, 'sm'], ['\u2261', 9, 56, 8, 'sm'], ['L3', 10, 25, 50, 'sm'], ['R3', 11, 62, 62, 'sm'],
+  ['\u25b2', 12, 30, 70, 'sm'], ['\u25bc', 13, 30, 90, 'sm'], ['\u25c0', 14, 24, 80, 'sm'], ['\u25b6', 15, 36, 80, 'sm']
+];
+function tpSend() {
+  TP.live = true;
+  document.documentElement.setAttribute('data-xcloud-vpad', TP.btn.join('') + '|' + TP.ax.map(v => Math.round(v * 1000) / 1000).join(','));
+}
+function tpBuild() {
+  const root = document.createElement('div');
+  root.id = 'xcloud-touch';
+  root.setAttribute('data-xcloud', 'touch');
+  const st = document.createElement('style'); st.textContent = TP_CSS; root.appendChild(st);
+  for (const [label, i, x, y, cls] of TP_BUTTONS) {
+    const b = document.createElement('div');
+    b.className = 'b ' + (cls || ''); b.textContent = label;
+    b.style.left = x + '%'; b.style.top = y + '%';
+    const press = v => { TP.btn[i] = v; b.classList.toggle('on', !!v); tpSend(); };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (x2) { /* ignore */ } press(1); });
+    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(t, () => { if (TP.btn[i]) press(0); });
+    root.appendChild(b);
+  }
+  // sticks: [x %, y %, first axis]
+  for (const [x, y, a] of [[13, 74, 0], [72, 82, 2]]) {
+    const z = document.createElement('div'); z.className = 'stick';
+    z.style.left = x + '%'; z.style.top = y + '%';
+    const k = document.createElement('div'); k.className = 'knob'; z.appendChild(k);
+    let id = null;
+    const move = e => {
+      const r = z.getBoundingClientRect(), rad = r.width / 2;
+      let dx = (e.clientX - (r.left + rad)) / rad, dy = (e.clientY - (r.top + rad)) / rad;
+      const len = Math.hypot(dx, dy); if (len > 1) { dx /= len; dy /= len; }
+      TP.ax[a] = dx; TP.ax[a + 1] = dy;
+      k.style.transform = `translate(${dx * rad * 0.6}px,${dy * rad * 0.6}px)`;
+      tpSend();
+    };
+    z.addEventListener('pointerdown', e => { e.preventDefault(); id = e.pointerId; try { z.setPointerCapture(id); } catch (x2) { /* ignore */ } move(e); });
+    z.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
+    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) z.addEventListener(t, e => {
+      if (e.pointerId !== id) return; id = null; TP.ax[a] = 0; TP.ax[a + 1] = 0; k.style.transform = ''; tpSend();
+    });
+    root.appendChild(z);
+  }
+  return root;
+}
+function touchCheck() {
+  if (!ON_DASH || !document.body) return;
+  const show = TOUCH_ON && !OVERLAY_UP && !!document.querySelector('#game-stream video');
+  if (show) {
+    if (!TP.el) { TP.el = tpBuild(); appLog('touch controller shown'); }
+    const fs = document.fullscreenElement;
+    const host = fs && fs.tagName !== 'VIDEO' ? fs : document.body;
+    if (TP.el.parentNode !== host) host.appendChild(TP.el);
+  } else if (TP.el) {
+    TP.el.remove(); TP.el = null; TP.btn.fill(0); TP.ax.fill(0);
+    if (TP.live) { TP.live = false; document.documentElement.removeAttribute('data-xcloud-vpad'); }
+    appLog('touch controller hidden');
+  }
+}
+setInterval(touchCheck, 500);
 
 // ---------- gamepad reading ----------
 // Combine every connected pad into one set of buttons, plus the left stick as a D-pad.

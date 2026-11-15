@@ -66,6 +66,13 @@ const DEFAULTS = {
   video_brightness: 100,
   stream_stats: false,       // a small box with the stream's resolution, fps, ping, bitrate...
   vibration: 100,            // controller vibration strength in games, 0 (off) to 100%
+  audio_boost: 100,          // the game's sound, 100 (as it is) to 600%
+  prefer_ipv6: false,        // connect to the game server over IPv6 when there is one
+  wait_time: true,           // a game's page shows the wait for a server
+  mic_on_launch: false,      // turn the microphone on when a game starts
+  touch_controller: false,   // see-through controller buttons over the game for touch screens
+  no_social: false,          // don't load friends, messages and suggested people
+  region_unlock: 'off',      // play as if in another country: 'off', 'au', 'br', 'eu', 'jp', 'kr' or 'us'
   language: 'auto',          // 'auto' = the same as Batocera
   controller_fix: true,      // put controllers the browser doesn't know (Steam Deck...) in the Xbox layout
   game_list: 'off',          // EmulationStation's Xbox Cloud list: 'off' (just the app), 'all' cloud games, 'free' (free with ads) or 'picked' ones
@@ -77,6 +84,12 @@ const DEFAULTS = {
 const STREAM_RES = ['auto', '1080p', '1080p-hq', '1440p'];
 const SHARPEN = ['off', 'low', 'medium', 'high'];
 const VIBRATION = [0, 25, 50, 75, 100];
+const BOOST = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600];
+// Region unlock: the address Xbox Cloud Gaming is told the requests come
+// from (X-Forwarded-For), a public address in that country, the same way as
+// the "Xbox Cloud Gaming Region Unlocker" script. No VPN; the same risk as one.
+const UNLOCK = { au: '203.41.44.20', br: '200.221.11.101', eu: '194.25.0.68', jp: '122.1.0.154', kr: '203.253.64.1', us: '4.2.2.2' };
+const UNLOCK_CODES = ['off'].concat(Object.keys(UNLOCK));
 const PICTURE = ['video_contrast', 'video_saturation', 'video_brightness'];
 // 50-150 in steps of 5; anything else is 100 (unchanged)
 function pictureLevel(v) { const n = Number(v); return Number.isFinite(n) ? Math.round(Math.min(150, Math.max(50, n)) / 5) * 5 : 100; }
@@ -85,7 +98,9 @@ let STREAM_JS = '';
 try { STREAM_JS = fs.readFileSync(path.join(__dirname, 'stream.js'), 'utf8'); } catch (e) { /* logged at startup */ }
 function streamCfg() {
   return { res: cfg.stream_resolution, sharpen: SHARPEN.indexOf(cfg.video_sharpen), clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration,
-    contrast: cfg.video_contrast, saturation: cfg.video_saturation, brightness: cfg.video_brightness };
+    contrast: cfg.video_contrast, saturation: cfg.video_saturation, brightness: cfg.video_brightness,
+    boost: cfg.audio_boost, vol: appVolume(), ipv6: cfg.prefer_ipv6, wait: cfg.wait_time, mic: cfg.mic_on_launch,
+    waitT: { label: i18n.t(cfg.language, 'waitLabel'), none: i18n.t(cfg.language, 'waitNone'), min: i18n.t(cfg.language, 'waitMin') } };
 }
 function streamScript() {
   return `window.__xcloudStreamCfg = ${JSON.stringify(streamCfg())}; ${STREAM_JS}`;
@@ -155,6 +170,11 @@ function loadConfig(profileId) {
   for (const k of PICTURE) cfg[k] = pictureLevel(cfg[k]);
   const vib = Number(cfg.vibration);
   cfg.vibration = Number.isFinite(vib) ? Math.round(Math.min(100, Math.max(0, vib)) / 25) * 25 : DEFAULTS.vibration;
+  const boost = Number(cfg.audio_boost);
+  cfg.audio_boost = Number.isFinite(boost) ? Math.round(Math.min(600, Math.max(100, boost)) / 50) * 50 : 100;
+  for (const k of ['prefer_ipv6', 'mic_on_launch', 'touch_controller', 'no_social']) cfg[k] = cfg[k] === true;
+  cfg.wait_time = cfg.wait_time !== false;
+  cfg.region_unlock = UNLOCK_CODES.includes(cfg.region_unlock) ? cfg.region_unlock : 'off';
   const iv = Number(cfg.intro_volume);
   cfg.intro_volume = Number.isFinite(iv) ? Math.round(Math.min(100, Math.max(0, iv))) : DEFAULTS.intro_volume;
   cfg.intro_muted = cfg.intro_muted === true;
@@ -244,6 +264,10 @@ function sessionFor(p) {
 }
 function curSession() { return sessionFor(curProfile); }
 const sessionsReady = new Set();
+let unlockLogged = false, socialLogged = false;
+const SOCIAL_URLS = ['*://peoplehub.xboxlive.com/users/me/people/social*', '*://peoplehub.xboxlive.com/users/me/people/recommendations*',
+  '*://xblmessaging.xboxlive.com/network/xbox/users/me/inbox*', '*://xblmessaging.xboxlive.com/network/xbox/users/me/conversations*'];
+function hostOf(u) { try { return new URL(u).hostname; } catch (e) { return ''; } }
 function setupSession(ses) {
   if (sessionsReady.has(ses)) return;
   sessionsReady.add(ses);
@@ -251,10 +275,37 @@ function setupSession(ses) {
   try {
     ses.setPermissionRequestHandler((wc, permission, callback, details) => {
       const origin = (details && (details.requestingUrl || details.securityOrigin)) || wc.getURL();
+      // the microphone, for voice chat in games, with "Microphone on game launch" on
+      // (sound only: never the camera)
+      if (permission === 'media') {
+        const types = (details && details.mediaTypes) || [];
+        const ok = cfg.mic_on_launch && types.length > 0 && types.every(t => t === 'audio') && /(^|\.)xbox\.com$/i.test(hostOf(origin));
+        if (cfg.mic_on_launch) log(`microphone ${ok ? 'allowed' : 'not allowed'} for ${hostOf(origin)} (${types.join(', ') || 'nothing named'})`);
+        callback(ok);
+        return;
+      }
       callback(okPermissions.has(permission) && rules.hostAllowed(origin, allowList));
     });
     ses.on('will-download', event => { event.preventDefault(); log('blocked a download'); });
   } catch (e) { /* ignore */ }
+  // Region unlock: Xbox Cloud Gaming is told the requests come from that country
+  try {
+    ses.webRequest.onBeforeSendHeaders({ urls: ['*://xgpuweb.gssv-play-prod.xboxlive.com/*', '*://www.xbox.com/*', '*://play.xbox.com/*'] }, (details, cb) => {
+      const ip = UNLOCK[cfg.region_unlock];
+      if (!ip) { cb({}); return; }
+      const h = Object.assign({}, details.requestHeaders, { 'X-Forwarded-For': ip });
+      if (/\/v2\/login\/user/i.test(details.url) && !unlockLogged) { unlockLogged = true; log(`region unlock: signing in to Xbox Cloud Gaming as ${cfg.region_unlock.toUpperCase()}`); }
+      cb({ requestHeaders: h });
+    });
+  } catch (e) { log(`region unlock not available: ${e.message}`); }
+  // Disable social features: friends, messages and suggested people aren't loaded
+  try {
+    ses.webRequest.onBeforeRequest({ urls: SOCIAL_URLS }, (details, cb) => {
+      if (!cfg.no_social) { cb({}); return; }
+      if (!socialLogged) { socialLogged = true; log('social features off: friends, messages and suggestions not loaded'); }
+      cb({ cancel: true });
+    });
+  } catch (e) { log(`social features switch not available: ${e.message}`); }
   try { ses.setUserAgent(cleanUserAgent()); } catch (e) { /* ignore */ }
   // open the connections (DNS + secure handshake) now, so the Xbox page
   // starts loading faster when it's asked for
@@ -613,6 +664,7 @@ function settingsHtml() {
     'gpuT', 'gpuHelp', 'shT', 'shHelp', 'clT', 'clHelp', 'ctT', 'saT', 'brT', 'picHelp', 'shLow', 'shMed', 'shHigh', 'statsT', 'statsHelp', 'vibT', 'vibHelp', 'introSound', 'introSoundHelp', 'muted',
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glFree', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpFree', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
+    'unlockT', 'unlockHelp', 'unlockEu', 'boostT', 'boostHelp', 'socialT', 'socialHelp', 'ipv6T', 'ipv6Help', 'micT', 'micHelp', 'waitT', 'waitHelp', 'touchT', 'touchHelp',
     'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b'];
   const T = {};
   for (const [code] of i18n.LANGS) {
@@ -628,6 +680,7 @@ function settingsHtml() {
     volume: cfg.volume, vmute: cfg.muted, soe: cfg.sign_out_on_exit, highlight: cfg.keyboard_highlight, intro: cfg.introMode, windows: cfg.stream_as_windows,
     res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration,
     pic: { ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness },
+    unlock: cfg.region_unlock, unlocks: UNLOCK_CODES, boost: cfg.audio_boost, social: cfg.no_social, ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller,
     ivol: cfg.intro_volume, imute: cfg.intro_muted,
     engine: process.versions.electron, appv: VERSION, upd,
     glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun, glPct,
@@ -729,6 +782,10 @@ function settingsHtml() {
     <div><div class="picker"><span class="arrow" id="prev">&#9664;</span><span class="value" id="region"></span><span class="arrow" id="next">&#9654;</span></div>
     <div class="count" id="count"></div></div>
   </div>
+  <div class="row" id="row-unlock">
+    <div><div class="label" data-k="unlockT"></div><div class="help" data-k="unlockHelp"></div></div>
+    <div class="picker"><span class="arrow" id="ulprev">&#9664;</span><span class="value" id="unlock" style="width:220px"></span><span class="arrow" id="ulnext">&#9654;</span></div>
+  </div>
   <div class="row" id="row-language">
     <div><div class="label" data-k="language"></div><div class="help" data-k="languageHelp"></div></div>
     <div><div class="picker"><span class="arrow" id="lprev">&#9664;</span><span class="value" id="language"></span><span class="arrow" id="lnext">&#9654;</span></div>
@@ -738,6 +795,10 @@ function settingsHtml() {
     <div><div class="label" data-k="volume"></div><div class="help" data-k="volumeHelp"></div></div>
     <div class="picker"><span class="arrow" id="vdown">&minus;</span><span class="bar"><i id="vbar"></i></span><span class="arrow" id="vup">+</span><span class="pct" id="vpct" style="min-width:96px"></span>
     <span class="toggle" id="vmute" style="margin-left:6px"></span></div>
+  </div>
+  <div class="row" id="row-boost">
+    <div><div class="label" data-k="boostT"></div><div class="help" data-k="boostHelp"></div></div>
+    <div class="picker"><span class="arrow" id="bodown">&minus;</span><span class="bar" style="width:200px"><i id="bobar"></i></span><span class="arrow" id="boup">+</span><span class="pct" id="bopct" style="min-width:96px"></span></div>
   </div>
   <div class="row" id="row-highlight">
     <div><div class="label" data-k="keys"></div><div class="help" data-k="keysHelp"></div></div>
@@ -752,6 +813,10 @@ function settingsHtml() {
     <div class="picker"><span class="arrow" id="idown">&minus;</span><span class="bar" style="width:200px"><i id="ibar"></i></span><span class="arrow" id="iup">+</span><span class="pct" id="ipct" style="min-width:96px"></span>
     <span class="toggle" id="imute" style="margin-left:6px"></span></div>
   </div>
+  <div class="row" id="row-social">
+    <div><div class="label" data-k="socialT"></div><div class="help" data-k="socialHelp"></div></div>
+    <div class="picker"><span class="state" id="social-state"></span><span class="toggle" id="social"></span></div>
+  </div>
   <div class="sec" data-k="secStream"></div>
   <div class="row" id="row-res">
     <div><div class="label" data-k="resT"></div><div class="help" id="res-help"></div></div>
@@ -765,9 +830,21 @@ function settingsHtml() {
     <div><div class="label" data-k="gpuT"></div><div class="help" data-k="gpuHelp"></div></div>
     <div class="picker"><span class="state" id="gpu-state"></span><span class="toggle" id="gpu"></span></div>
   </div>
+  <div class="row" id="row-ipv6">
+    <div><div class="label" data-k="ipv6T"></div><div class="help" data-k="ipv6Help"></div></div>
+    <div class="picker"><span class="state" id="ipv6-state"></span><span class="toggle" id="ipv6"></span></div>
+  </div>
+  <div class="row" id="row-mic">
+    <div><div class="label" data-k="micT"></div><div class="help" data-k="micHelp"></div></div>
+    <div class="picker"><span class="state" id="mic-state"></span><span class="toggle" id="mic"></span></div>
+  </div>
   <div class="row" id="row-stats">
     <div><div class="label" data-k="statsT"></div><div class="help" data-k="statsHelp"></div></div>
     <div class="picker"><span class="state" id="stats-state"></span><span class="toggle" id="stats"></span></div>
+  </div>
+  <div class="row" id="row-wait">
+    <div><div class="label" data-k="waitT"></div><div class="help" data-k="waitHelp"></div></div>
+    <div class="picker"><span class="state" id="wait-state"></span><span class="toggle" id="wait"></span></div>
   </div>
   <div class="sec" data-k="secPic"></div>
   <div class="row" id="row-sharpen">
@@ -798,6 +875,10 @@ function settingsHtml() {
   <div class="row" id="row-vib">
     <div><div class="label" data-k="vibT"></div><div class="help" data-k="vibHelp"></div></div>
     <div class="picker"><span class="arrow" id="vbdown">&minus;</span><span class="bar" style="width:200px"><i id="vibbar"></i></span><span class="arrow" id="vbup">+</span><span class="pct" id="vibpct" style="min-width:96px"></span></div>
+  </div>
+  <div class="row" id="row-touch">
+    <div><div class="label" data-k="touchT"></div><div class="help" data-k="touchHelp"></div></div>
+    <div class="picker"><span class="state" id="touch-state"></span><span class="toggle" id="touch"></span></div>
   </div>
   <div class="sec" data-k="secBato"></div>
   <div class="row" id="row-glist">
@@ -850,6 +931,7 @@ function settingsHtml() {
   // the stream options
   var RES = ['auto', '1080p', '1080p-hq', '1440p'], rsi = Math.max(0, RES.indexOf(S.res));
   var SH = ['off', 'low', 'medium', 'high'], shi = Math.max(0, SH.indexOf(S.sharpen));
+  var ui_ = Math.max(0, S.unlocks.indexOf(S.unlock));
   // a child's profile doesn't get the rows that look after the whole machine
   // the game list's own rows only show while it's on: "This game in
   // Batocera's list" with Games I pick (on a game's page), 3D game boxes with
@@ -858,10 +940,10 @@ function settingsHtml() {
   function buildRows() {
     // the same order as on screen, section by section
     rows = (S.reload ? ['row-user'] : []).concat(['row-signout', 'row-soe'])
-      .concat(['row-region', 'row-language', 'row-volume', 'row-highlight', 'row-intro', 'row-isound'])
-      .concat(['row-res', 'row-windows', 'row-gpu', 'row-stats'])
+      .concat(['row-region', 'row-unlock', 'row-language', 'row-volume', 'row-boost', 'row-highlight', 'row-intro', 'row-isound', 'row-social'])
+      .concat(['row-res', 'row-windows', 'row-gpu', 'row-ipv6', 'row-mic', 'row-stats', 'row-wait'])
       .concat(['row-sharpen', 'row-clarity', 'row-ct', 'row-sa', 'row-br'])
-      .concat(['row-controls', 'row-vib'])
+      .concat(['row-controls', 'row-vib', 'row-touch'])
       .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : []))
       .concat(S.reload ? ['row-reload'] : []).concat(['row-cache', 'row-logs', 'row-update', 'buttons']);
     LAST = rows.length - 1;
@@ -898,6 +980,12 @@ function settingsHtml() {
     return S.names[ui()][S.codes.indexOf(code)];
   }
   function confirming() { return Date.now() < confirmUntil; }
+  // a country's name in the screen's language (Europe has its own text)
+  function unlockName(c) {
+    if (c === 'off') return tx('off');
+    if (c === 'eu') return tx('unlockEu');
+    try { return new Intl.DisplayNames([ui()], { type: 'region' }).of(c.toUpperCase()); } catch (e) { return c.toUpperCase(); }
+  }
   // the names of the controller's View and Menu buttons
   function padNames() {
     var id = '';
@@ -987,6 +1075,13 @@ function settingsHtml() {
     });
     $('gpu').className = 'toggle' + (S.gpu ? ' yes' : '');
     $('gpu-state').textContent = S.gpu ? tx('on') : tx('off');
+    $('unlock').textContent = unlockName(S.unlocks[ui_]);
+    $('bobar').style.width = (S.boost - 100) / 5 + '%';
+    $('bopct').textContent = S.boost + '%';
+    ['social', 'ipv6', 'mic', 'wait', 'touch'].forEach(function (k) {
+      $(k).className = 'toggle' + (S[k] ? ' yes' : '');
+      $(k + '-state').textContent = S[k] ? tx('on') : tx('off');
+    });
     $('stats').className = 'toggle' + (S.stats ? ' yes' : '');
     $('stats-state').textContent = S.stats ? tx('on') : tx('off');
     $('vibbar').style.width = S.vib + '%';
@@ -1016,6 +1111,7 @@ function settingsHtml() {
     go('settings-save?region=' + encodeURIComponent(regions[ri]) + '&lang=' + encodeURIComponent(S.langs[li][0]) +
        '&volume=' + S.volume + '&highlight=' + (S.highlight ? 1 : 0) + '&intro=' + INTRO[ii] + '&windows=' + (S.windows ? 1 : 0) +
        '&res=' + RES[rsi] + '&sharpen=' + SH[shi] + '&clarity=' + (S.clarity ? 1 : 0) + '&ct=' + S.pic.ct + '&sa=' + S.pic.sa + '&br=' + S.pic.br + '&gpu=' + (S.gpu ? 1 : 0) + '&stats=' + (S.stats ? 1 : 0) + '&vib=' + S.vib +
+       '&unlock=' + S.unlocks[ui_] + '&boost=' + S.boost + '&social=' + (S.social ? 1 : 0) + '&ipv6=' + (S.ipv6 ? 1 : 0) + '&mic=' + (S.mic ? 1 : 0) + '&wait=' + (S.wait ? 1 : 0) + '&touch=' + (S.touch ? 1 : 0) +
        '&ivol=' + S.ivol + '&imute=' + (S.imute ? 1 : 0) + '&vmute=' + (S.vmute ? 1 : 0) + '&soe=' + (S.soe ? 1 : 0) + '&glist=' + GL[gi] + '&g3d=' + (S.g3d ? 1 : 0) +
          (S.game ? '&gid=' + S.game.id + '&gslug=' + encodeURIComponent(S.game.slug) + '&gpick=' + (S.gpicked ? 1 : 0) : ''));
   }
@@ -1077,6 +1173,13 @@ function settingsHtml() {
     else if (r === 'row-res') rsi = (rsi + step + RES.length) % RES.length;
     else if (r === 'row-sharpen') shi = (shi + step + SH.length) % SH.length;
     else if (r === 'row-stats') S.stats = !S.stats;
+    else if (r === 'row-unlock') ui_ = (ui_ + step + S.unlocks.length) % S.unlocks.length;
+    else if (r === 'row-boost') S.boost = Math.min(600, Math.max(100, S.boost + step * 50));
+    else if (r === 'row-social') S.social = !S.social;
+    else if (r === 'row-ipv6') S.ipv6 = !S.ipv6;
+    else if (r === 'row-mic') S.mic = !S.mic;
+    else if (r === 'row-wait') S.wait = !S.wait;
+    else if (r === 'row-touch') S.touch = !S.touch;
     else if (r === 'row-gpu') S.gpu = !S.gpu;
     else if (r === 'row-clarity') S.clarity = !S.clarity;
     else if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { var pk = r.slice(4); S.pic[pk] = Math.min(150, Math.max(50, S.pic[pk] + step * 5)); }
@@ -1098,6 +1201,7 @@ function settingsHtml() {
     if (r === 'row-update') { update(); return; }
     if (r === 'row-isound') { S.imute = !S.imute; render(); return; }   // A / Enter: mute or unmute
     if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { S.pic[r.slice(4)] = 100; render(); return; }   // A / Enter: back to 100%
+    if (r === 'row-boost') { S.boost = 100; render(); return; }   // A / Enter: no boost
     change(1);
   }
   window.addEventListener('keydown', function (e) {
@@ -1131,14 +1235,16 @@ function settingsHtml() {
   arrow('rsprev', 'row-res', -1); arrow('rsnext', 'row-res', 1);
   arrow('shprev', 'row-sharpen', -1); arrow('shnext', 'row-sharpen', 1);
   arrow('vbdown', 'row-vib', -1); arrow('vbup', 'row-vib', 1);
+  arrow('ulprev', 'row-unlock', -1); arrow('ulnext', 'row-unlock', 1);
+  arrow('bodown', 'row-boost', -1); arrow('boup', 'row-boost', 1);
   ['ct', 'sa', 'br'].forEach(function (k) { arrow(k + 'down', 'row-' + k, -1); arrow(k + 'up', 'row-' + k, 1); });
   $('vmute').addEventListener('click', function (e) { e.stopPropagation(); row = rowOf('row-volume'); S.vmute = !S.vmute; render(); if (!S.vmute) beep(); });
   $('imute').addEventListener('click', function (e) { e.stopPropagation(); row = rowOf('row-isound'); S.imute = !S.imute; render(); });
   $('row-isound').addEventListener('click', function () { row = rowOf('row-isound'); render(); });
-  ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist', 'row-res', 'row-sharpen', 'row-vib', 'row-ct', 'row-sa', 'row-br'].forEach(function (id) {
+  ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist', 'row-res', 'row-sharpen', 'row-vib', 'row-ct', 'row-sa', 'row-br', 'row-unlock', 'row-boost'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); render(); });
   });
-  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d'].forEach(function (id) {
+  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d', 'row-social', 'row-ipv6', 'row-mic', 'row-wait', 'row-touch'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); change(1); });
   });
   $('row-reload').addEventListener('click', function () { row = rowOf('row-reload'); render(); reload(); });
@@ -1237,6 +1343,11 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
   if (typeof stream.clarity === 'boolean') obj.clarity_boost = cfg.clarity_boost = stream.clarity;
   if (typeof stream.stats === 'boolean') obj.stream_stats = cfg.stream_stats = stream.stats;
   if (VIBRATION.includes(stream.vib)) obj.vibration = cfg.vibration = stream.vib;
+  if (UNLOCK_CODES.includes(stream.unlock)) obj.region_unlock = cfg.region_unlock = stream.unlock;
+  if (BOOST.includes(stream.boost)) obj.audio_boost = cfg.audio_boost = stream.boost;
+  for (const [k, q] of [['no_social', 'social'], ['prefer_ipv6', 'ipv6'], ['mic_on_launch', 'mic'], ['wait_time', 'wait'], ['touch_controller', 'touch']]) {
+    if (typeof stream[q] === 'boolean') obj[k] = cfg[k] = stream[q];
+  }
   if (language === 'auto' || (language && i18n.STRINGS[language])) {
     cfg.languageChoice = language;
     cfg.language = language === 'auto' ? batoceraLanguage() : language;
@@ -1250,7 +1361,9 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
         keyboard_highlight: cfg.keyboard_highlight, play_intro: cfg.introMode === 'always' ? true : cfg.introMode === 'daily' ? 'daily' : false,
         intro_volume: cfg.intro_volume, intro_muted: cfg.intro_muted, stream_as_windows: cfg.stream_as_windows, sign_out_on_exit: cfg.sign_out_on_exit,
         stream_resolution: cfg.stream_resolution, video_sharpen: cfg.video_sharpen, clarity_boost: cfg.clarity_boost,
-        video_contrast: cfg.video_contrast, video_saturation: cfg.video_saturation, video_brightness: cfg.video_brightness, stream_stats: cfg.stream_stats, vibration: cfg.vibration
+        video_contrast: cfg.video_contrast, video_saturation: cfg.video_saturation, video_brightness: cfg.video_brightness, stream_stats: cfg.stream_stats, vibration: cfg.vibration,
+        region_unlock: cfg.region_unlock, audio_boost: cfg.audio_boost, no_social: cfg.no_social, prefer_ipv6: cfg.prefer_ipv6,
+        mic_on_launch: cfg.mic_on_launch, wait_time: cfg.wait_time, touch_controller: cfg.touch_controller
       });
       if (gpuChanged) {
         let base = {};
@@ -1260,7 +1373,7 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
       }
     } else fs.writeFileSync(CONFIG, JSON.stringify(obj, null, 2) + '\n');
     if (gpuChanged) log(`GPU acceleration turned ${cfg.gpu_acceleration ? 'on' : 'off'}: it applies the next time the app opens`);
-    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
+    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, region unlock ${cfg.region_unlock}, volume boost ${cfg.audio_boost}%, social ${cfg.no_social ? 'off' : 'on'}, prefer IPv6 ${cfg.prefer_ipv6 ? 'on' : 'off'}, microphone on launch ${cfg.mic_on_launch ? 'on' : 'off'}, wait time ${cfg.wait_time ? 'on' : 'off'}, touch controller ${cfg.touch_controller ? 'on' : 'off'}, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
   } catch (e) {
     log(`could not save settings: ${e.message}`);
   }
@@ -1996,8 +2109,39 @@ const PAD_GATE = `(function(){
       try { all = Array.prototype.slice.call(real.call(navigator)).filter(function (p) { return p && p.connected; }); } catch (e) { /* none */ }
       return { real: all.map(function (p) { return p.id; }), blocked: window.__xcloudPadsBlocked || false, announced: window.__xcloudAnnounced || 0, why: window.__xcloudAnnouncedWhy || '', focus: document.hasFocus(), visible: document.visibilityState };
     };
+    // the app's on-screen touch controller (preload.js): its state is on the
+    // page (data-xcloud-vpad: 17 buttons as 0/1, then 4 stick axes), and Xbox
+    // gets it as one more Xbox controller
+    var VPAD_ID = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)', vpadTs = 0, vpadUp = false;
+    function vpad(slot) {
+      var raw = document.documentElement && document.documentElement.getAttribute('data-xcloud-vpad');
+      if (!raw) return null;
+      var parts = raw.split('|'), bits = parts[0] || '', ax = (parts[1] || '0,0,0,0').split(',').map(Number);
+      var bs = [];
+      for (var i = 0; i < 17; i++) { var on = bits.charAt(i) === '1'; bs.push({ pressed: on, touched: on, value: on ? 1 : 0 }); }
+      vpadTs = performance.now();
+      return { id: VPAD_ID, index: slot, connected: true, timestamp: vpadTs, mapping: 'standard', axes: ax, buttons: bs, vibrationActuator: null, hapticActuators: [] };
+    }
+    function vpadAnnounce() {
+      var p = vpad(3); if (!p) return;
+      var ev = new Event('gamepadconnected'); Object.defineProperty(ev, 'gamepad', { value: p });
+      try { window.dispatchEvent(ev); } catch (e) { /* ignore */ }
+    }
+    try {
+      new MutationObserver(function () {
+        var up = !!document.documentElement.getAttribute('data-xcloud-vpad');
+        if (up && !vpadUp) setTimeout(vpadAnnounce, 0);
+        vpadUp = up;
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-xcloud-vpad'] });
+    } catch (e) { /* ignore */ }
     Navigator.prototype.getGamepads = function () {
       var pads = Array.prototype.map.call(real.call(this), function (p) { return window.__xcloudShowPad(p); });
+      if (vpadUp || (document.documentElement && document.documentElement.getAttribute('data-xcloud-vpad'))) {
+        pads = Array.prototype.slice.call(pads);
+        while (pads.length < 4) pads.push(null);
+        var slot = pads.indexOf(null); if (slot < 0) slot = 3;
+        var v = vpad(slot); if (v) pads[slot] = v;
+      }
       if (window.__xcloudPadsBlocked === 'release') {
         var held = false;
         for (var i = 0; i < pads.length; i++) { var p = pads[i]; if (p) for (var b = 0; b < p.buttons.length; b++) if (p.buttons[b].pressed) held = true; }
@@ -2234,9 +2378,13 @@ function handleAction(wc, url) {
       q.has('ivol') ? Number(q.get('ivol')) : NaN, q.has('imute') ? q.get('imute') === '1' : undefined,
       q.has('vmute') ? q.get('vmute') === '1' : undefined, q.has('soe') ? q.get('soe') === '1' : undefined,
       { res: q.get('res'), gpu: q.has('gpu') ? q.get('gpu') === '1' : undefined, sharpen: q.get('sharpen'), clarity: q.has('clarity') ? q.get('clarity') === '1' : undefined,
-        ct: q.has('ct') ? Number(q.get('ct')) : NaN, sa: q.has('sa') ? Number(q.get('sa')) : NaN, br: q.has('br') ? Number(q.get('br')) : NaN, stats: q.has('stats') ? q.get('stats') === '1' : undefined, vib: q.has('vib') ? Number(q.get('vib')) : undefined });
+        ct: q.has('ct') ? Number(q.get('ct')) : NaN, sa: q.has('sa') ? Number(q.get('sa')) : NaN, br: q.has('br') ? Number(q.get('br')) : NaN, stats: q.has('stats') ? q.get('stats') === '1' : undefined, vib: q.has('vib') ? Number(q.get('vib')) : undefined,
+        unlock: q.get('unlock'), boost: q.has('boost') ? Number(q.get('boost')) : undefined,
+        social: q.has('social') ? q.get('social') === '1' : undefined, ipv6: q.has('ipv6') ? q.get('ipv6') === '1' : undefined,
+        mic: q.has('mic') ? q.get('mic') === '1' : undefined, wait: q.has('wait') ? q.get('wait') === '1' : undefined, touch: q.has('touch') ? q.get('touch') === '1' : undefined });
     // the stream options change on the dashboard straight away (the resolution from the next game)
     applyStreamOptions(mainWin && mainWin.webContents);
+    try { mainWin && mainWin.webContents.send('xcloud-touch', cfg.touch_controller); } catch (e) { /* ignore */ }
     if (q.has('glist')) saveGameList(q);
     // the new volume (or mute) takes effect straight away
     for (const w of BrowserWindow.getAllWindows ? BrowserWindow.getAllWindows() : []) {
@@ -3405,7 +3553,7 @@ function preloadText() {
 // the volume the Xbox page plays at: 0 when muted in Settings
 function appVolume() { return cfg.muted ? 0 : cfg.volume; }
 ipcMain.on('xcloud-config', event => {
-  event.returnValue = { exitHoldMs: Math.round(cfg.exit_hold_seconds * 1000), keyHighlight: cfg.keyboard_highlight, padFix: cfg.controller_fix !== false, volume: appVolume(), i18n: preloadText(),
+  event.returnValue = { touch: cfg.touch_controller, exitHoldMs: Math.round(cfg.exit_hold_seconds * 1000), keyHighlight: cfg.keyboard_highlight, padFix: cfg.controller_fix !== false, volume: appVolume(), i18n: preloadText(),
     stream: (() => { try { return onXboxPlay(event.sender.getURL()) ? streamScript() : ''; } catch (e) { return ''; } })() };
 });
 // the controller's Menu button on the welcome screen

@@ -8,10 +8,14 @@
 //   contrast, saturation, brightness 50..150 the picture (100 = unchanged)
 //   stats   true / false                    the stream stats box
 //   vib     0 .. 100                        controller vibration strength (%)
+//   boost   100 .. 600                      the game's sound (%), vol the app's volume 0 .. 100
+//   ipv6    true / false                    prefer the game server's IPv6 address
+//   wait    true / false                    a game's page shows the wait for a server (waitT: its text)
+//   mic     true / false                    turn the microphone on when a game starts
 (function () {
   if (window.__xcloudStream) return;
   window.__xcloudStream = 1;
-  var C = Object.assign({ res: 'auto', sharpen: 0, clarity: false, contrast: 100, saturation: 100, brightness: 100, stats: false, vib: 100 }, window.__xcloudStreamCfg || {});
+  var C = Object.assign({ res: 'auto', sharpen: 0, clarity: false, contrast: 100, saturation: 100, brightness: 100, stats: false, vib: 100, boost: 100, vol: 100, ipv6: false, wait: true, mic: false, waitT: {} }, window.__xcloudStreamCfg || {});
   function say(m) { try { console.info('[xcloud] ' + m); } catch (e) { /* ignore */ } }
 
   // ---------- resolution: the play request says which kind of device this is ----------
@@ -61,6 +65,107 @@
       return new Response(JSON.stringify(obj), { status: res.status, statusText: res.statusText, headers: res.headers });
     } catch (e) { return res; }
   }
+  // ---------- prefer IPv6: the server's IPv6 address first ----------
+  // The ICE answer lists the addresses the game server can be reached on; the
+  // browser tries them by priority. IPv6 ones are put first (when there are any).
+  var CAND = /^a=candidate:(\S+) (\d+) (udp|tcp) (\d+) (\S+) (\d+) (.*)$/i;
+  async function iceRequest(input, init) {
+    var res = await nativeFetch.call(window, input, init);
+    if (!C.ipv6) return res;
+    try {
+      var obj = await res.clone().json();
+      if (!obj || typeof obj.exchangeResponse !== 'string') return res;
+      var list = JSON.parse(obj.exchangeResponse);
+      if (!Array.isArray(list)) return res;
+      var cands = list.filter(function (c) { return c && CAND.test(c.candidate || ''); });
+      var six = cands.filter(function (c) { return CAND.exec(c.candidate)[5].indexOf(':') >= 0; });
+      if (!six.length) { say('prefer IPv6: the server offered no IPv6 address'); return res; }
+      var ordered = six.concat(cands.filter(function (c) { return six.indexOf(c) < 0; }));
+      var prio = 2130706431;
+      ordered.forEach(function (c, i) {
+        var m = CAND.exec(c.candidate);
+        c.candidate = 'a=candidate:' + (i + 1) + ' ' + m[2] + ' ' + m[3] + ' ' + (prio - i * 1000) + ' ' + m[5] + ' ' + m[6] + ' ' + m[7];
+      });
+      obj.exchangeResponse = JSON.stringify(ordered.concat(list.filter(function (c) { return cands.indexOf(c) < 0; })));
+      say('prefer IPv6: ' + six.length + ' IPv6 of ' + cands.length + ' server addresses put first');
+      return new Response(JSON.stringify(obj), { status: res.status, statusText: res.statusText, headers: res.headers });
+    } catch (e) { say('prefer IPv6: left as it is (' + e.message + ')'); return res; }
+  }
+
+  // ---------- the wait for a server, on a game's page ----------
+  // Xbox Cloud Gaming's own requests carry the sign-in token and go to the
+  // region's server; the games list maps each game (Store ID) to its title ID.
+  // With those, /v1/waittime/<title ID> gives the expected wait.
+  var gs = { token: '', base: '', titles: {} };
+  function noteGssv(url, input, init) {
+    try {
+      var h = new Headers((init && init.headers) || (input && input.headers) || {});
+      var auth = h.get('Authorization');
+      if (auth && /^Bearer /i.test(auth)) gs.token = auth;
+      var u = new URL(url);
+      if (!/^xgpuweb\./i.test(u.hostname) && /gssv-play-prod/i.test(u.hostname)) gs.base = u.origin;
+    } catch (e) { /* ignore */ }
+  }
+  function noteLogin(text) {
+    try {
+      var j = JSON.parse(text);
+      if (j.gsToken) gs.token = 'Bearer ' + j.gsToken;
+      var regs = (j.offeringSettings && j.offeringSettings.regions) || [];
+      var def = regs.filter(function (r) { return r.isDefault; })[0] || regs[0];
+      if (def && def.baseUri) gs.base = String(def.baseUri).replace(/\/$/, '');
+    } catch (e) { /* not that */ }
+  }
+  function noteTitles(text) {
+    try {
+      var j = JSON.parse(text), n = 0;
+      (j.results || []).forEach(function (t) {
+        var pid = t && t.details && t.details.productId;
+        if (pid && t.titleId) { gs.titles[String(pid).toUpperCase()] = t.titleId; n++; }
+      });
+      if (n) say('wait time: ' + Object.keys(gs.titles).length + ' games known');
+    } catch (e) { /* not that */ }
+  }
+  var pill = null, waitFor = '', waitTimer = null;
+  function showPill(text) {
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.id = 'xcloud-wait';
+      pill.setAttribute('style', 'position:fixed;top:84px;right:24px;z-index:2147483000;pointer-events:none;' +
+        'font:600 18px/1.2 "Segoe UI",system-ui,sans-serif;color:#fff;background:rgba(16,16,16,.88);border:2px solid #107c10;' +
+        'padding:8px 16px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.5)');
+      document.documentElement.appendChild(pill);
+    }
+    pill.textContent = '\u23f1 ' + text;
+    pill.style.display = 'block';
+  }
+  function hidePill() { if (pill) pill.style.display = 'none'; }
+  function fmtWait(sec) {
+    var T = C.waitT || {};
+    if (sec < 60) return (T.label || 'Wait time: {t}').replace('{t}', T.none || 'no wait');
+    return (T.label || 'Wait time: {t}').replace('{t}', (T.min || 'about {n} min').replace('{n}', Math.round(sec / 60)));
+  }
+  async function askWait(pid) {
+    var tid = gs.titles[pid];
+    if (!tid || !gs.token || !gs.base) { say('wait time: not known yet for ' + pid + (tid ? '' : ' (no title ID)') + (gs.token ? '' : ' (no sign-in)') + (gs.base ? '' : ' (no server)')); return; }
+    try {
+      var r = await nativeFetch.call(window, gs.base + '/v1/waittime/' + tid, { headers: { Authorization: gs.token } });
+      if (!r.ok) { say('wait time: ' + r.status + ' for ' + tid); return; }
+      var j = await r.json();
+      var sec = Number(j.estimatedTotalWaitTimeInSeconds);
+      if (!Number.isFinite(sec) || waitFor !== pid) return;
+      showPill(fmtWait(sec));
+    } catch (e) { say('wait time: ' + e.message); }
+  }
+  setInterval(function () {
+    var m = /\/launch\/[^/]+\/([0-9A-Z]{12})/i.exec(location.pathname);
+    var pid = m && C.wait && !document.querySelector('#game-stream video') ? m[1].toUpperCase() : '';
+    if (pid === waitFor) return;
+    waitFor = pid; hidePill(); clearInterval(waitTimer);
+    if (!pid) return;
+    askWait(pid);
+    waitTimer = setInterval(function () { if (waitFor === pid) askWait(pid); }, 60000);
+  }, 1000);
+
   // ---------- the site's game lists (Game Pass catalog), named in the log ----------
   // e.g. "catalog list: 29a81209-... | All games | 573 games": how the app's own
   // game list options find Microsoft's lists (free to play, play with ads...)
@@ -173,6 +278,16 @@
         return res;
       });
     }
+    if (/gssv-play-prod\.xboxlive\.com/i.test(url)) {
+      noteGssv(url, input, init);
+      if (/\/v2\/login\/user/i.test(url) || /\/v2\/titles/i.test(url)) {
+        return nativeFetch.apply(this, arguments).then(function (res) {
+          try { res.clone().text().then(function (t) { if (/login/i.test(url)) noteLogin(t); else noteTitles(t); }).catch(function () {}); } catch (e) { /* ignore */ }
+          return res;
+        });
+      }
+    }
+    if (/\/v5\/sessions\/cloud\/[^/]+\/ice(\?|$)/.test(url) && method === 'GET') return iceRequest(input, init);
     if (/\/v5\/sessions\/cloud\/play(\?|$)/.test(url) && method === 'POST') return playRequest(input, init);
     if (/\/v5\/sessions\/cloud\/[^/]+\/configuration(\?|$)/.test(url) && method === 'GET') return configRequest(input, init);
     return nativeFetch.apply(this, arguments);
@@ -234,11 +349,74 @@
     css.textContent = filters.length ? '#game-stream video { filter: ' + filters.join(' ') + ' !important; }' : '';
   }
 
+  // ---------- volume boost: the game's sound through a gain of up to 6x ----------
+  // Only once it's above 100%: the stream's sound goes through Web Audio
+  // (the page's own player is muted so it isn't heard twice).
+  var audioTracks = [], actx = null, gain = null, routed = [];
+  function gainValue() { return Math.max(0, Math.min(1, (C.vol == null ? 100 : C.vol) / 100)) * Math.max(1, Math.min(6, (C.boost || 100) / 100)); }
+  function boostAudio() {
+    audioTracks = audioTracks.filter(function (t) { return t.readyState !== 'ended'; });
+    routed = routed.filter(function (t) { return t.readyState !== 'ended'; });
+    if (!actx && (C.boost || 100) <= 100) return;
+    try {
+      if (!actx) {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        gain = actx.createGain(); gain.connect(actx.destination);
+      }
+      gain.gain.value = gainValue();
+      audioTracks.forEach(function (t) {
+        if (routed.indexOf(t) >= 0) return;
+        actx.createMediaStreamSource(new MediaStream([t])).connect(gain);
+        routed.push(t);
+        say('volume boost: the game\'s sound at ' + C.boost + '%');
+      });
+      if (actx.state === 'suspended') actx.resume().catch(function () {});
+      muteOwnPlayers();
+    } catch (e) { say('volume boost not available: ' + e.message); }
+  }
+  // the page's players of a boosted track are muted (and given back if Web Audio stops)
+  function muteOwnPlayers() {
+    var live = actx && actx.state === 'running' && routed.length;
+    document.querySelectorAll('video,audio').forEach(function (el) {
+      var src = el.srcObject, has = false;
+      try { has = !!src && src.getAudioTracks && src.getAudioTracks().some(function (t) { return routed.indexOf(t) >= 0; }); } catch (e) { has = false; }
+      if (has && live) { if (!el.muted) { el.muted = true; el.dataset.xcloudBoost = '1'; } }
+      else if (el.dataset.xcloudBoost === '1') { el.muted = false; delete el.dataset.xcloudBoost; }
+    });
+  }
+  setInterval(function () { if (actx) { if (actx.state === 'suspended') actx.resume().catch(function () {}); muteOwnPlayers(); } }, 1000);
+
+  // ---------- microphone on game launch ----------
+  // Once a game is streaming, the stream's own microphone switch is pressed
+  // (once per game). Its name is in the site's language.
+  var MIC = /mi[ck]ro|マイク|마이크/i;
+  var MIC_ON = /unmute|turn on|enable|activ|einschalt|aktivier|allumer|attiva|inschakel|slå på|sla pa|käynnist|włącz|zapn|bekapcs|ligar|オン|켜기/i;
+  var micDone = false, micSince = 0;
+  function micLabel(b) { return ((b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '') + ' ' + (b.textContent || '')).replace(/\s+/g, ' ').trim(); }
+  setInterval(function () {
+    var streaming = !!document.querySelector('#game-stream video');
+    if (!streaming) { micDone = false; micSince = 0; return; }
+    if (!C.mic || micDone) return;
+    if (!micSince) micSince = Date.now();
+    if (Date.now() - micSince < 4000) return;
+    var btns = Array.prototype.filter.call(document.querySelectorAll('button,[role=button],[role=switch],[role=menuitemcheckbox]'), function (b) { return MIC.test(micLabel(b)); });
+    if (!btns.length) { if (Date.now() - micSince > 60000) { micDone = true; say('microphone on launch: no microphone switch found on the stream'); } return; }
+    micDone = true;
+    var on = btns.filter(function (b) { return MIC_ON.test(micLabel(b)) || b.getAttribute('aria-pressed') === 'false' || b.getAttribute('aria-checked') === 'false'; })[0];
+    say('microphone on launch: switches seen: ' + btns.map(function (b) { return '"' + micLabel(b).slice(0, 40) + '"'; }).join(', '));
+    if (on) { on.click(); say('microphone on launch: turned on ("' + micLabel(on).slice(0, 40) + '")'); }
+    else say('microphone on launch: it already looks on');
+  }, 1000);
+
   // ---------- stream stats ----------
   var PCs = [];
   var NativePC = window.RTCPeerConnection;
   if (NativePC) {
-    var PC = function (a, b) { var pc = new NativePC(a, b); PCs.push(pc); return pc; };
+    var PC = function (a, b) {
+      var pc = new NativePC(a, b); PCs.push(pc);
+      try { pc.addEventListener('track', function (e) { if (e.track && e.track.kind === 'audio') { audioTracks.push(e.track); boostAudio(); } }); } catch (e) { /* ignore */ }
+      return pc;
+    };
     PC.prototype = NativePC.prototype;
     Object.setPrototypeOf(PC, NativePC);
     window.RTCPeerConnection = PC;
@@ -297,8 +475,10 @@
     Object.assign(C, c || {});
     try { sharpen(); } catch (e) { /* no page yet */ }
     stats();
+    try { if (gain) gain.gain.value = gainValue(); boostAudio(); } catch (e) { /* ignore */ }
+    if (!C.wait) { waitFor = ''; hidePill(); }
   };
   if (document.documentElement) window.__xcloudStreamSet();
   else document.addEventListener('DOMContentLoaded', function () { window.__xcloudStreamSet(); });
-  say('stream options: resolution ' + C.res + ', sharpening ' + C.sharpen + ', clarity ' + (C.clarity ? 'on' : 'off') + ', picture ' + C.contrast + '/' + C.saturation + '/' + C.brightness + '%' + ', stats ' + (C.stats ? 'on' : 'off') + ', vibration ' + C.vib + '%');
+  say('stream options: resolution ' + C.res + ', sharpening ' + C.sharpen + ', clarity ' + (C.clarity ? 'on' : 'off') + ', picture ' + C.contrast + '/' + C.saturation + '/' + C.brightness + '%' + ', stats ' + (C.stats ? 'on' : 'off') + ', vibration ' + C.vib + '%' + ', volume boost ' + C.boost + '%' + ', prefer IPv6 ' + (C.ipv6 ? 'on' : 'off') + ', microphone on launch ' + (C.mic ? 'on' : 'off') + ', wait time ' + (C.wait ? 'on' : 'off'));
 })();

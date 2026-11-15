@@ -147,13 +147,26 @@ The rows are grouped in sections:
 
   GENERAL
   Region                     the country and language of the Xbox site
+  Region unlock (no VPN)     off / Australia / Brazil / Europe / Japan /
+                             Korea / United States. For where Xbox Cloud
+                             Gaming isn't offered: Xbox is told you're in
+                             that country (the way the "Xbox Cloud Gaming
+                             Region Unlocker" script does it). No VPN, but
+                             the same risk as one, and that country's
+                             servers may be far away (higher ping).
+                             Applies after Reload dashboard
   Language                   the language of the app's own screens
                              ("Same as Batocera", or "Same as HippOS"
                              on HippOS, follows the system's language)
   Volume                     the app's volume (0-100%), or mute
+  Game volume boost          makes a game's sound louder: 100-600%. Very
+                             high levels can distort. A / Enter: 100%
   Light up keys when typing  real-keyboard keys light up on screen
   Intro video                every time / once a day / off
   Intro video sound          the intro's volume, or mute
+  Disable social features    friends, messages and suggested people
+                             aren't loaded, so the dashboard loads
+                             faster. Applies after Reload dashboard
 
   STREAM
   Stream resolution          720p (standard, about 10 Mbps internet,
@@ -171,9 +184,19 @@ The rows are grouped in sections:
                              machines; turn it off if the screen flickers
                              or goes black. Applies the next time the app
                              opens, for everyone on this machine
+  Prefer IPv6 server         connects to the game's server over IPv6
+                             when your internet has it; can lower the
+                             ping. Starts with the next game
+  Microphone on game launch  turns on the microphone for voice chat when
+                             a game starts (sound only; the camera is
+                             never allowed). It presses the stream's own
+                             microphone switch; the log says what it
+                             found. Starts with the next game
   Stream stats               a small box at the top while you play:
                              resolution, frame rate, ping, bitrate,
                              packet loss and decode time
+  Wait time on game pages    a game's page shows how long you'd wait for
+                             a server (on by default)
 
   PICTURE
   Sharpening                 off / low / medium / high. Sharpens the
@@ -188,6 +211,11 @@ The rows are grouped in sections:
   Controls                   every button and key the app uses
   Controller vibration       how strong the rumble is in games: off, 25%,
                              50%, 75% or 100%
+  On-screen touch controller see-through controller buttons over a game
+                             while it streams, for touch screens: sticks,
+                             D-pad, A B X Y, bumpers, triggers, View,
+                             Menu, L3 and R3. Xbox sees it as one more
+                             Xbox controller from the first touch
 
   EMULATIONSTATION
   EmulationStation game list off / all cloud games / free with ads /
@@ -422,6 +450,10 @@ Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 What's new in 1.2.5
 -------------------
+- New in Settings, like Better xCloud: Game volume boost (up to 600%),
+  Region unlock without a VPN, Disable social features, Prefer IPv6
+  server, Microphone on game launch, Wait time on game pages and an
+  on-screen touch controller (see Settings).
 - install.sh works on its own: with nothing else next to it, it
   downloads the newest release from GitHub into /userdata/Xbox Cloud
   Gaming and installs that (see Install and update). With the zip it

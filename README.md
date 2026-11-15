@@ -19,6 +19,9 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 - **Picture**: sharpening, Clarity boost, and sliders for contrast, colour saturation and brightness.
 - **Stream stats**: resolution, frame rate, ping, bitrate, packet loss and decode time, shown at the top while you play.
 - **Controller vibration** strength, and **GPU acceleration** (including hardware video decoding).
+- **Game volume boost** up to 600%, **Prefer IPv6 server**, **Microphone on game launch**, and the **wait time** for a server on each game's page.
+- **Region unlock without a VPN** (Australia, Brazil, Europe, Japan, Korea, United States) for where Xbox Cloud Gaming isn't offered, and **Disable social features** for a faster dashboard.
+- An **on-screen touch controller**: see-through buttons over the game for touch screens.
 
 **EmulationStation game list** (optional)
 - **All cloud games** (about 570), **Free with ads** (the games anyone can play free with ads, no Game Pass needed), **Games I pick** (add a game with F8 or LB + RB + LT + RT), or **Off** (just the app itself).
@@ -94,10 +97,10 @@ In Settings: up and down to move, left and right to change, A to select, Menu to
 | Section | What's in it |
 |---|---|
 | Profile and account | Change user, sign out of Xbox, sign out when closing |
-| General | Region, language, volume, key highlights, intro video and its sound |
-| Stream | Resolution, stream as a Windows PC, GPU acceleration, stream stats |
+| General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound, disable social features |
+| Stream | Resolution, stream as a Windows PC, GPU acceleration, prefer IPv6 server, microphone on game launch, stream stats, wait time on game pages |
 | Picture | Sharpening, Clarity boost, contrast, colour saturation, brightness |
-| Controller | The full list of controls, vibration strength |
+| Controller | The full list of controls, vibration strength, on-screen touch controller |
 | EmulationStation | The game list (Off / All cloud games / Free with ads / Games I pick), 3D game boxes |
 | Help and maintenance | Reload dashboard, clear cache, save logs for help, updates |
 
