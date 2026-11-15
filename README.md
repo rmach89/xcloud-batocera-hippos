@@ -87,6 +87,7 @@ bash /tmp/xcloud-install.sh
 | Settings on the dashboard | — | — | Backspace |
 | Add or remove the current game in EmulationStation's list | hold LB + RB + LT + RT | hold L1 + R1 + L2 + R2 | F8 |
 | Open a whole row (its title) on the dashboard | hold View on a game in it (1 s) | hold Share/Create | — |
+| Quick settings in a game (sound and picture) | hold LB + RB + View (1 s) | hold L1 + R1 + Share/Create | F9 |
 
 The first few times you move onto a row with the controller, a hint at the bottom shows how to open it ("Hold View to open Stream for free with ads").
 

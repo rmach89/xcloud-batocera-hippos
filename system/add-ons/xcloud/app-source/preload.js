@@ -538,10 +538,10 @@ const TP_CSS = `
   #xcloud-touch .b.on{background:rgba(255,255,255,.38)}
   #xcloud-touch .stick{border-radius:50%;width:24vmin;height:24vmin}
   #xcloud-touch .knob{width:10vmin;height:10vmin;border-radius:50%;background:rgba(255,255,255,.30);border:2px solid rgba(255,255,255,.55);pointer-events:none}
-  #xcloud-touch .A{color:#7fd16f}#xcloud-touch .B{color:#ff7b72}#xcloud-touch .X{color:#6cb6ff}#xcloud-touch .Y{color:#ffd866}`;
+  #xcloud-touch .ka{color:#7fd16f}#xcloud-touch .kb{color:#ff7b72}#xcloud-touch .kx{color:#6cb6ff}#xcloud-touch .ky{color:#ffd866}`;
 // [label, button index, x %, y %, extra class]
 const TP_BUTTONS = [
-  ['A', 0, 87, 74, 'A'], ['B', 1, 94, 61, 'B'], ['X', 2, 80, 61, 'X'], ['Y', 3, 87, 48, 'Y'],
+  ['A', 0, 87, 74, 'ka'], ['B', 1, 94, 61, 'kb'], ['X', 2, 80, 61, 'kx'], ['Y', 3, 87, 48, 'ky'],
   ['LB', 4, 17, 10, 'sh'], ['RB', 5, 83, 10, 'sh'], ['LT', 6, 6, 10, 'sh'], ['RT', 7, 94, 10, 'sh'],
   ['\u29c9', 8, 44, 8, 'sm'], ['\u2261', 9, 56, 8, 'sm'], ['L3', 10, 25, 50, 'sm'], ['R3', 11, 62, 62, 'sm'],
   ['\u25b2', 12, 30, 70, 'sm'], ['\u25bc', 13, 30, 90, 'sm'], ['\u25c0', 14, 24, 80, 'sm'], ['\u25b6', 15, 36, 80, 'sm']
@@ -589,7 +589,7 @@ function tpBuild() {
 }
 function touchCheck() {
   if (!ON_DASH || !document.body) return;
-  const show = TOUCH_ON && !OVERLAY_UP && !!document.querySelector('#game-stream video');
+  const show = TOUCH_ON && !OVERLAY_UP && !QP.open && !!document.querySelector('#game-stream video');
   if (show) {
     if (!TP.el) { TP.el = tpBuild(); appLog('touch controller shown'); }
     const fs = document.fullscreenElement;
@@ -602,6 +602,149 @@ function touchCheck() {
   }
 }
 setInterval(touchCheck, 500);
+
+// ---------- quick settings in a game ----------
+// A panel on the right over the game, for the sound and the picture: hold
+// LB + RB + View for a second (or press F9). Up / down choose, left / right
+// change, A puts a setting back to its default, B (or the same buttons, F9,
+// Esc) closes. Xbox doesn't get the controller while it's up (main.js).
+const QP = { open: false, el: null, row: 0, v: null };
+const QP_ROWS = [
+  { sec: 'qpAudio' },
+  { k: 'volume', t: 'volume', min: 0, max: 100, step: 10, def: 100 },
+  { k: 'boost', t: 'boostT', min: 100, max: 600, step: 50, def: 100 },
+  { sec: 'qpVideo' },
+  { k: 'sharpen', t: 'shT', list: ['off', 'low', 'medium', 'high'], def: 'off' },
+  { k: 'clarity', t: 'clT', toggle: true, def: false },
+  { k: 'sa', t: 'saT', min: 50, max: 150, step: 5, def: 100 },
+  { k: 'ct', t: 'ctT', min: 50, max: 150, step: 5, def: 100 },
+  { k: 'br', t: 'brT', min: 50, max: 150, step: 5, def: 100 }
+];
+const QP_ITEMS = QP_ROWS.filter(r => r.k);
+const QP_CSS = `
+  #xcloud-qp{position:fixed;top:0;right:0;bottom:0;width:min(560px,42vw);z-index:2147483640;background:rgba(22,22,22,.96);
+    border-left:4px solid ${GREEN};color:#eee;font-family:${FONT_STACK};padding:26px 30px;box-sizing:border-box;overflow-y:auto;
+    box-shadow:-12px 0 40px rgba(0,0,0,.6);animation:xqpin .15s ease-out}
+  @keyframes xqpin{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  #xcloud-qp h1{margin:0 0 6px;font-size:28px;font-weight:600;color:#fff}
+  #xcloud-qp .sec{margin:20px 0 8px;font-size:22px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff}
+  #xcloud-qp .r{padding:12px 14px;border-radius:10px;border:2px solid transparent;margin-bottom:6px}
+  #xcloud-qp .r.on{border-color:${GREEN};background:rgba(16,124,16,.16)}
+  #xcloud-qp .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  #xcloud-qp .lab{font-size:20px}
+  #xcloud-qp .ctl{display:flex;align-items:center;gap:8px}
+  #xcloud-qp .pm{width:36px;height:36px;border-radius:8px;background:#333;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;user-select:none}
+  #xcloud-qp .val{min-width:96px;text-align:center;font:600 18px ui-monospace,Consolas,monospace;color:#ddd}
+  #xcloud-qp .bar{height:8px;border-radius:4px;background:#e6e6e6;margin-top:10px;overflow:hidden}
+  #xcloud-qp .bar i{display:block;height:100%;background:${GREEN}}
+  #xcloud-qp .hint{margin-top:18px;font-size:15px;color:#9a9a9a}`;
+function qpStreaming() { return !!document.querySelector('#game-stream video'); }
+function qpText(r) {
+  const v = QP.v[r.k];
+  if (r.k === 'volume' && QP.v.muted) return TXT.muted || 'Muted';
+  if (r.toggle) return v ? TXT.on : TXT.off;
+  if (r.list) return { off: TXT.off, low: TXT.shLow, medium: TXT.shMed, high: TXT.shHigh }[v] || v;
+  return v + '%';
+}
+function qpRender() {
+  if (!QP.el) return;
+  let i = 0;
+  for (const r of QP_ROWS) {
+    if (!r.k) continue;
+    const el = QP.el.querySelector(`[data-k="${r.k}"]`);
+    el.classList.toggle('on', i === QP.row);
+    el.querySelector('.val').textContent = qpText(r);
+    const bar = el.querySelector('.bar i');
+    if (bar) bar.style.width = ((QP.v[r.k] - r.min) / (r.max - r.min) * 100) + '%';
+    i++;
+  }
+}
+function qpChange(dir, idx) {
+  const r = QP_ITEMS[idx == null ? QP.row : idx];
+  if (!r || !QP.v) return;
+  let v = QP.v[r.k];
+  if (dir === 0) v = r.def;
+  else if (r.toggle) v = !v;
+  else if (r.list) v = r.list[(r.list.indexOf(v) + dir + r.list.length) % r.list.length];
+  else v = Math.min(r.max, Math.max(r.min, v + dir * r.step));
+  QP.v[r.k] = v;
+  if (r.k === 'volume') QP.v.muted = false;
+  ipcRenderer.send('xcloud-qp-set', { k: r.k, v });
+  qpRender();
+}
+function qpBuild() {
+  const el = document.createElement('div');
+  el.id = 'xcloud-qp'; el.setAttribute('data-xcloud', 'quick');
+  const st = document.createElement('style'); st.textContent = QP_CSS; el.appendChild(st);
+  const h = document.createElement('h1'); h.textContent = TXT.qpTitle || 'Quick settings'; el.appendChild(h);
+  let i = 0;
+  for (const r of QP_ROWS) {
+    if (!r.k) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = TXT[r.sec] || r.sec; el.appendChild(d); continue; }
+    const idx = i++;
+    const row = document.createElement('div'); row.className = 'r'; row.dataset.k = r.k;
+    row.innerHTML = '<div class="top"><span class="lab"></span><span class="ctl"><span class="pm" data-d="-1">\u2212</span><span class="val"></span><span class="pm" data-d="1">+</span></span></div>' +
+      (r.min != null ? '<div class="bar"><i></i></div>' : '');
+    row.querySelector('.lab').textContent = TXT[r.t] || r.k;
+    row.querySelectorAll('.pm').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); QP.row = idx; qpChange(Number(b.dataset.d), idx); }));
+    row.addEventListener('click', () => { QP.row = idx; qpRender(); });
+    el.appendChild(row);
+  }
+  const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = TXT.qpHint || ''; el.appendChild(hint);
+  return el;
+}
+ipcRenderer.on('xcloud-qp-state', (e, v) => {
+  if (!QP.open) return;
+  QP.v = v;
+  if (!QP.el) {
+    QP.el = qpBuild();
+    const fs = document.fullscreenElement;
+    (fs && fs.tagName !== 'VIDEO' ? fs : document.body).appendChild(QP.el);
+  }
+  qpRender();
+});
+function qpToggle(why) {
+  if (QP.open) {
+    QP.open = false;
+    if (QP.el) { QP.el.remove(); QP.el = null; }
+    ipcRenderer.send('xcloud-qp', false);
+    appLog(`quick settings closed (${why})`);
+    return;
+  }
+  if (!ON_DASH || OVERLAY_UP || osk.isOpen || !qpStreaming()) return;
+  QP.open = true; QP.row = 0; QP.v = null;
+  ipcRenderer.send('xcloud-qp', true);
+  appLog(`quick settings opened (${why})`);
+}
+// LB + RB + View held for a second (once per hold)
+const QP_COMBO = [4, 5, 8], QP_HOLD_MS = 1000;
+let qpSince = 0, qpDone = false;
+function checkQuickCombo(s) {
+  if (!ON_DASH || OVERLAY_UP) { qpSince = 0; return; }
+  if (QP_COMBO.every(b => s[b])) {
+    if (!qpSince) qpSince = Date.now();
+    else if (!qpDone && Date.now() - qpSince >= QP_HOLD_MS) { qpDone = true; qpToggle('LB + RB + View'); }
+  } else { qpSince = 0; qpDone = false; }
+}
+function qpPress(b) {
+  if (b === BTN.UP) QP.row = (QP.row + QP_ITEMS.length - 1) % QP_ITEMS.length;
+  else if (b === BTN.DOWN) QP.row = (QP.row + 1) % QP_ITEMS.length;
+  else if (b === BTN.LEFT) { qpChange(-1); return; }
+  else if (b === BTN.RIGHT) { qpChange(1); return; }
+  else if (b === BTN.A) { qpChange(0); return; }
+  else if (b === BTN.B) { qpToggle('B'); return; }
+  qpRender();
+}
+if (ON_DASH) {
+  window.addEventListener('keydown', e => {
+    if (e.key === 'F9') { e.preventDefault(); e.stopPropagation(); qpToggle('F9'); return; }
+    if (!QP.open) return;
+    e.preventDefault(); e.stopPropagation();
+    const map = { ArrowUp: BTN.UP, ArrowDown: BTN.DOWN, ArrowLeft: BTN.LEFT, ArrowRight: BTN.RIGHT, Enter: BTN.A, ' ': BTN.A, Escape: BTN.B, Backspace: BTN.B };
+    if (e.key in map) qpPress(map[e.key]);
+  }, true);
+  // the game ended with it open: close it
+  setInterval(() => { if (QP.open && !qpStreaming()) qpToggle('game ended'); }, 1000);
+}
 
 // ---------- gamepad reading ----------
 // Combine every connected pad into one set of buttons, plus the left stick as a D-pad.
@@ -765,9 +908,9 @@ function checkPickCombo(s) {
 const ROW_HOLD_MS = 1000;
 let rowStart = 0, rowDone = false, rowSpoiled = false;
 function checkRowHold(s) {
-  if (!ON_DASH || OVERLAY_UP || osk.isOpen) { rowStart = 0; return; }
+  if (!ON_DASH || OVERLAY_UP || osk.isOpen || QP.open || qpStreaming()) { rowStart = 0; return; }
   if (s[BTN.VIEW]) {
-    if (s[BTN.MENU]) rowSpoiled = true;
+    if (s[BTN.MENU] || s[4] || s[5]) rowSpoiled = true;
     if (!rowStart) rowStart = Date.now();
     if (!rowDone && !rowSpoiled && Date.now() - rowStart >= ROW_HOLD_MS) { rowDone = true; openRow(); }
   } else { rowStart = 0; rowDone = false; rowSpoiled = false; }
@@ -1357,6 +1500,7 @@ function onPress(b) {
     if (b === BTN.A) ipcRenderer.send('xcloud-retry');
     return;
   }
+  if (ON_DASH && QP.open) { if (!(prev[4] && prev[5])) qpPress(b); return; }
   if (ON_DASH) { dashPress(b); return; }
   if (!NAV_ON) return;
   if (osk.isOpen) {
@@ -1489,6 +1633,7 @@ function tick() {
   checkExit(s);
   checkMenuHold(s);
   checkPickCombo(s);
+  checkQuickCombo(s);
   checkRowHold(s);
   if (ON_INTRO) updateIntroKeys();
   const now = Date.now();

@@ -665,7 +665,7 @@ function settingsHtml() {
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glFree', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpFree', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
     'unlockT', 'unlockHelp', 'unlockEu', 'boostT', 'boostHelp', 'socialT', 'socialHelp', 'ipv6T', 'ipv6Help', 'micT', 'micHelp', 'waitT', 'waitHelp', 'touchT', 'touchHelp',
-    'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b'];
+    'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b', 'c10a', 'c10b'];
   const T = {};
   for (const [code] of i18n.LANGS) {
     T[code] = Object.fromEntries(KEYS.map(k => [k, i18n.t(code, k)]));
@@ -999,7 +999,7 @@ function settingsHtml() {
     var vars = { view: n.view, menu: n.menu, t: T._t, t1: T._t1 };
     var list = $('clist');
     list.textContent = '';
-    for (var i = 1; i <= 9; i++) {
+    for (var i = 1; i <= 10; i++) {
       var r = document.createElement('div'); r.className = 'crow';
       var k = document.createElement('div'); k.className = 'k'; k.textContent = tx('c' + i + 'a', vars);
       var d = document.createElement('div'); d.className = 'd'; d.textContent = tx('c' + i + 'b', vars);
@@ -2162,6 +2162,40 @@ const PAD_GATE = `(function(){
 // "held" for more than 8 seconds (a button that reads as always pressed) ->
 // handed back anyway. What the page sees is logged when it changes.
 let padWatchLast = '', padReleaseSince = 0, padAnnounced = 0;
+// ---------- quick settings in a game (preload.js draws it) ----------
+// Audio and video adjustments over the game: hold LB + RB + View, or F9.
+// While it's up, Xbox doesn't get the controller. Each change is seen at
+// once; they're saved when it closes.
+let qpOpen = false;
+function qpState() {
+  return { volume: cfg.volume, muted: cfg.muted, boost: cfg.audio_boost, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost,
+    sa: cfg.video_saturation, ct: cfg.video_contrast, br: cfg.video_brightness };
+}
+function qpSave() {
+  saveSettings(currentRegion(), cfg.volume, cfg.keyboard_highlight, cfg.languageChoice, cfg.introMode, cfg.stream_as_windows,
+    cfg.intro_volume, cfg.intro_muted, cfg.muted, cfg.sign_out_on_exit,
+    { res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness,
+      stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration, unlock: cfg.region_unlock, boost: cfg.audio_boost, social: cfg.no_social,
+      ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller });
+}
+ipcMain.on('xcloud-qp', (event, open) => {
+  qpOpen = !!open;
+  const wc = event.sender;
+  wc.executeJavaScript(`${PAD_GATE} window.__xcloudPadsBlocked = ${qpOpen ? 'true' : "'release'"};`).catch(() => { /* page between loads */ });
+  if (qpOpen) { log('quick settings opened in a game'); try { wc.send('xcloud-qp-state', qpState()); } catch (e) { /* ignore */ } }
+  else { log('quick settings closed'); qpSave(); }
+});
+ipcMain.on('xcloud-qp-set', (event, m) => {
+  const k = m && m.k, v = m && m.v, n = Number(v);
+  if (k === 'volume' && Number.isFinite(n)) { cfg.volume = Math.round(Math.min(100, Math.max(0, n))); cfg.muted = false; }
+  else if (k === 'boost' && BOOST.includes(n)) cfg.audio_boost = n;
+  else if (k === 'sharpen' && SHARPEN.includes(v)) cfg.video_sharpen = v;
+  else if (k === 'clarity') cfg.clarity_boost = v === true;
+  else if (k === 'sa' || k === 'ct' || k === 'br') cfg[{ sa: 'video_saturation', ct: 'video_contrast', br: 'video_brightness' }[k]] = pictureLevel(n);
+  else return;
+  applyStreamOptions(event.sender);
+  if (k === 'volume') { try { event.sender.send('xcloud-volume', appVolume()); } catch (e) { /* ignore */ } }
+});
 function padWatch() {
   const wc = mainWin && mainWin.webContents;
   if (!wc || wc.isDestroyed() || SETTINGS_MODE) return;
@@ -2174,7 +2208,7 @@ function padWatch() {
     if (state !== padWatchLast) { padWatchLast = state; log(`controllers on the Xbox page: ${state}${overlay ? ' (an app screen is up)' : ''}`); }
     if (info.announced > padAnnounced) log(`controller announced to the Xbox page again (${info.why})`);
     padAnnounced = info.announced;
-    if (overlay) { padReleaseSince = 0; return; }
+    if (overlay || qpOpen) { padReleaseSince = 0; return; }
     if (info.blocked === true) {
       log('controller was still hidden from Xbox with no app screen up: handing it back');
       wc.executeJavaScript("window.__xcloudPadsBlocked = 'release';").catch(() => {});
@@ -3545,7 +3579,8 @@ function createWindow() {
 
 function preloadText() {
   const L = cfg.language;
-  const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone', 'rowHint'];
+  const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone', 'rowHint',
+    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
   const text = Object.fromEntries(keys.map(k => [k, i18n.t(L, k)]));
   // the Japanese / Korean letters, for the keyboard and messages on the Xbox page
   return { lang: L, text, fontCss: L === 'ja' || L === 'ko' ? i18n.FONT_CSS : '', fontStack: i18n.FONT_STACK };

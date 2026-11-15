@@ -98,6 +98,14 @@ while on Xbox, or hold S on a keyboard. The welcome screen opens, and
 its View / Select button opens Settings. On the dashboard, Backspace
 opens Settings directly.
 
+Quick settings in a game: hold LB + RB + View (L1 + R1 + Share/Select)
+for 1 second while playing, or press F9 on a keyboard. A panel opens on
+the right with the sound (Volume, Game volume boost) and the picture
+(Sharpening, Clarity boost, Colour saturation, Contrast, Brightness).
+Up / down choose, left / right change, A puts one back to its default,
+B (or the same buttons, F9, Esc) closes. Changes show at once and are
+saved when it closes. The game doesn't get the controller while it's up.
+
 A whole row of games: Xbox's controller navigation skips the row titles
 ("Stream for free with ads >"). Hold View (Share / Select) for 1 second
 on a game in the row to open its full list. The first few times you move
@@ -450,6 +458,8 @@ Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 What's new in 1.2.5
 -------------------
+- Quick settings in a game: hold LB + RB + View for a second (F9 on a
+  keyboard) for the sound and picture settings over the game.
 - New in Settings, like Better xCloud: Game volume boost (up to 600%),
   Region unlock without a VPN, Disable social features, Prefer IPv6
   server, Microphone on game launch, Wait time on game pages and an
