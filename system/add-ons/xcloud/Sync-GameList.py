@@ -472,7 +472,7 @@ def ours(g):
     return False
 
 
-BOX_VERSION = 11  # gamebox3d.VERSION, for when Pillow isn't here
+BOX_VERSION = 12  # gamebox3d.VERSION, for when Pillow isn't here
 
 _converted = []
 def open_picture(path):
@@ -710,8 +710,56 @@ def list_games(info, got, boxes, state, covers=None):
     write_gamelist(root)
 
 
+def apply_played(path):
+    """Games played from the app's dashboard (not launched by EmulationStation,
+    which counts its own): their play count, last played and play time in
+    EmulationStation's list. path: JSON {store ID: {"n": times, "secs": seconds,
+    "last": "YYYYMMDDTHHMMSS"}}, written by the app; removed once done."""
+    played = read_json(path, {})
+    state = read_json(STATE, {})
+    files = {i: (g or {}).get("file") for i, g in (state.get("games") or {}).items()}
+    if not played or not os.path.exists(GAMELIST):
+        return 0
+    root = load_gamelist()
+    by_path = {(g.findtext("path") or ""): g for g in root.findall("game")}
+    done = []
+    for gid, p in played.items():
+        f = files.get(gid.upper())
+        g = by_path.get(f) if f else None
+        if g is None:
+            continue
+        def num(tag):
+            try:
+                return int(g.findtext(tag) or 0)
+            except ValueError:
+                return 0
+        for tag, val in (("playcount", num("playcount") + int(p.get("n", 0))), ("gametime", num("gametime") + int(p.get("secs", 0)))):
+            e = g.find(tag)
+            if e is None:
+                e = ET.SubElement(g, tag)
+            e.text = str(val)
+        if p.get("last"):
+            e = g.find("lastplayed")
+            if e is None:
+                e = ET.SubElement(g, "lastplayed")
+            e.text = p["last"]
+        done.append(g.findtext("name") or gid)
+    if done:
+        write_gamelist(root)
+        log(f"played from the app, counted in EmulationStation's list: {', '.join(done)}")
+        reload_es()
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return 0
+
+
 def main():
     args = sys.argv[1:]
+    if args and args[0] == "played" and len(args) > 1:
+        time.sleep(float(os.environ.get("XCLOUD_PLAYED_WAIT", "6")))   # after EmulationStation has saved its own list
+        return apply_played(args[1])
     mode = args[0] if args and args[0] in ("all", "free", "picked", "off") else read_json(CONFIG, {}).get("game_list", "off")
     market, lang = market_of(args[args.index("--market") + 1] if "--market" in args and args.index("--market") + 1 < len(args) else "en-us")
     state = read_json(STATE, {})

@@ -50,6 +50,11 @@ function setText(i) {
   }
 }
 let TOUCH_ON = false;   // the on-screen touch controller (Settings)
+let REPLAY_ON = false;   // instant replay (Settings > Stream)
+// split screen: this page's controller (index: a player's own; exclude: player
+// 1, the first controller the others haven't taken); neither = every controller
+let PADS = {};
+ipcRenderer.on('xcloud-pads', (e, p) => { PADS = { index: p && p.padIndex, exclude: p && p.padExclude }; });
 let STREAM_JS = '';   // the stream options (resolution, sharpening, stats, vibration), from the app
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
 try {
@@ -61,6 +66,8 @@ try {
   setText(c.i18n);
   STREAM_JS = c.stream || '';
   TOUCH_ON = c.touch === true;
+  PADS = { index: c.padIndex, exclude: c.padExclude };
+  REPLAY_ON = c.replay === true;
 } catch (e) { /* use defaults */ }
 
 const ON_XBOX = /(^|\.)xbox\.com$/i.test(location.hostname);
@@ -611,6 +618,8 @@ setInterval(touchCheck, 500);
 const QP = { open: false, el: null, row: 0, v: null };
 const QP_ROWS = [
   { k: 'shot', t: 'qpShot', action: true },
+  { k: 'replay', t: 'qpReplay', action: true, needs: 'replay' },
+  { k: 'stats', t: 'statsT', toggle: true, def: false },
   { sec: 'qpAudio' },
   { k: 'volume', t: 'volume', min: 0, max: 100, step: 10, def: 100 },
   { k: 'boost', t: 'boostT', min: 100, max: 600, step: 50, def: 100 },
@@ -619,9 +628,14 @@ const QP_ROWS = [
   { k: 'clarity', t: 'clT', toggle: true, def: false },
   { k: 'sa', t: 'saT', min: 50, max: 150, step: 5, def: 100 },
   { k: 'ct', t: 'ctT', min: 50, max: 150, step: 5, def: 100 },
-  { k: 'br', t: 'brT', min: 50, max: 150, step: 5, def: 100 }
+  { k: 'br', t: 'brT', min: 50, max: 150, step: 5, def: 100 },
+  { k: 'clean', t: 'cleanT', toggle: true, def: false },
+  // the upscaler (64-bit PCs)
+  { k: 'up', t: 'upT', toggle: true, def: false, x64: true },
+  { k: 'upTarget', t: 'utT', list: ['screen', '1080', '1440', '2160'], def: 'screen', x64: true },
+  { k: 'upSharp', t: 'usT', min: 0, max: 100, step: 10, def: 60, x64: true }
 ];
-const QP_ITEMS = QP_ROWS.filter(r => r.k);
+let QP_ITEMS = QP_ROWS.filter(r => r.k);
 const QP_CSS = `
   #xcloud-qp{position:fixed;top:0;right:0;bottom:0;width:min(560px,42vw);z-index:2147483640;background:rgba(22,22,22,.96);
     border-left:4px solid ${GREEN};color:#eee;font-family:${FONT_STACK};padding:26px 30px;box-sizing:border-box;overflow-y:auto;
@@ -645,14 +659,14 @@ function qpText(r) {
   const v = QP.v[r.k];
   if (r.k === 'volume' && QP.v.muted) return TXT.muted || 'Muted';
   if (r.toggle) return v ? TXT.on : TXT.off;
+  if (r.k === 'upTarget') return v === 'screen' ? (TXT.utScreen || 'Screen') : v === '2160' ? '4K' : v + 'p';
   if (r.list) return { off: TXT.off, low: TXT.shLow, medium: TXT.shMed, high: TXT.shHigh }[v] || v;
   return v + '%';
 }
 function qpRender() {
   if (!QP.el) return;
   let i = 0;
-  for (const r of QP_ROWS) {
-    if (!r.k) continue;
+  for (const r of QP_ITEMS) {
     const el = QP.el.querySelector(`[data-k="${r.k}"]`);
     el.classList.toggle('on', i === QP.row);
     el.querySelector('.val').textContent = qpText(r);
@@ -664,7 +678,12 @@ function qpRender() {
 function qpChange(dir, idx) {
   const r = QP_ITEMS[idx == null ? QP.row : idx];
   if (!r || !QP.v) return;
-  if (r.action) { if (dir === 0) { qpToggle('screenshot'); setTimeout(() => takeShot('quick settings'), 250); } return; }
+  if (r.action) {
+    if (dir !== 0) return;
+    if (r.k === 'replay') { qpToggle('instant replay'); saveClip(); return; }
+    qpToggle('screenshot'); setTimeout(() => takeShot('quick settings'), 250);
+    return;
+  }
   let v = QP.v[r.k];
   if (dir === 0) v = r.def;
   else if (r.toggle) v = !v;
@@ -680,8 +699,12 @@ function qpBuild() {
   el.id = 'xcloud-qp'; el.setAttribute('data-xcloud', 'quick');
   const st = document.createElement('style'); st.textContent = QP_CSS; el.appendChild(st);
   const h = document.createElement('h1'); h.textContent = TXT.qpTitle || 'Quick settings'; el.appendChild(h);
+  // the upscaler's rows only where it runs (64-bit PCs)
+  const rows = QP_ROWS.filter(r => (!r.x64 || (QP.v && QP.v.x64)) && (!r.needs || (QP.v && QP.v[r.needs])));
+  QP_ITEMS = rows.filter(r => r.k);
+  if (QP.v && QP.v.game) { const g = document.createElement('div'); g.className = 'hint'; g.style.marginTop = '0'; g.textContent = TXT.qpGame || ''; el.appendChild(g); }
   let i = 0;
-  for (const r of QP_ROWS) {
+  for (const r of rows) {
     if (!r.k) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = TXT[r.sec] || r.sec; el.appendChild(d); continue; }
     const idx = i++;
     const row = document.createElement('div'); row.className = 'r'; row.dataset.k = r.k;
@@ -763,10 +786,64 @@ ipcRenderer.on('xcloud-qp-hint-show', () => {
   toast(fill(TXT.qpTip || 'Hold LB + RB + {view}: quick settings', { view: viewLabel() }), 6000);
   appLog('quick settings hint shown');
 });
+// ---------- instant replay ----------
+// While a game streams, it's recorded in 30-second parts; the last two are
+// kept. Saving sends them to the app, which joins them and keeps the last 30
+// seconds (in /userdata/recordings).
+const REC = { mr: null, chunks: [], prev: null, timer: null, stream: null, failed: false };
+ipcRenderer.on('xcloud-replay', (e, on) => { REPLAY_ON = !!on; if (!on) recStop(true); });
+function recType() {
+  for (const t of ['video/webm;codecs=h264,opus', 'video/webm;codecs=vp8,opus', 'video/webm']) { try { if (MediaRecorder.isTypeSupported(t)) return t; } catch (e) { /* ignore */ } }
+  return '';
+}
+function recPart(stream, keep) {
+  // a fresh part: the one before is kept as "prev" once it's complete
+  const chunks = [];
+  const mr = new MediaRecorder(stream, { mimeType: recType(), videoBitsPerSecond: 8000000 });
+  mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+  mr.onstop = () => { if (keep !== false) REC.prev = new Blob(chunks, { type: 'video/webm' }); };
+  mr.start(1000);
+  REC.mr = mr; REC.chunks = chunks;
+}
+function recStart(stream) {
+  recStop(true);
+  try {
+    REC.stream = stream; REC.prev = null;
+    recPart(stream);
+    REC.timer = setInterval(() => { try { const old = REC.mr; recPart(stream); old.stop(); } catch (e) { /* ignore */ } }, 30000);
+    appLog(`instant replay: recording (${recType() || 'default'})`);
+  } catch (e) { REC.failed = true; appLog('instant replay not available: ' + e.message); }
+}
+function recStop(drop) {
+  clearInterval(REC.timer); REC.timer = null;
+  try { if (REC.mr && REC.mr.state !== 'inactive') { if (drop) REC.mr.onstop = null; REC.mr.stop(); } } catch (e) { /* ignore */ }
+  REC.mr = null; REC.stream = null;
+  if (drop) REC.prev = null;
+}
+async function saveClip() {
+  if (!REC.mr) { ipcRenderer.send('xcloud-clip', { parts: [] }); return; }
+  try {
+    const cur = REC.mr, chunks = REC.chunks, prev = REC.prev;
+    await new Promise(r => { cur.onstop = r; cur.stop(); });
+    const parts = [];
+    if (prev) parts.push(await prev.arrayBuffer());
+    parts.push(await new Blob(chunks, { type: 'video/webm' }).arrayBuffer());
+    ipcRenderer.send('xcloud-clip', { parts });
+    appLog(`instant replay: saving ${parts.length} part(s)`);
+    if (REC.stream) recPart(REC.stream);   // and carry on recording
+  } catch (e) { appLog('instant replay: ' + e.message); }
+}
 let qpWasStreaming = false, qpHintTimer = null;
 setInterval(() => {
   if (!ON_DASH) return;
   const now = qpStreaming();
+  if (now !== qpWasStreaming) {
+    try { ipcRenderer.send('xcloud-stream', { on: now }); } catch (e) { /* ignore */ }
+    const v = document.querySelector('#game-stream video');
+    if (now && REPLAY_ON && v && v.srcObject) recStart(v.srcObject);
+    if (!now) recStop(true);
+  }
+  if (now && REPLAY_ON && !REC.mr && !REC.failed) { const v = document.querySelector('#game-stream video'); if (v && v.srcObject) recStart(v.srcObject); }
   if (now && !qpWasStreaming) { clearTimeout(qpHintTimer); qpHintTimer = setTimeout(() => { if (qpStreaming()) ipcRenderer.send('xcloud-qp-hint'); }, 4000); }
   qpWasStreaming = now;
 }, 1000);
@@ -817,6 +894,11 @@ function readPads() {
   const state = new Array(17).fill(false);
   let pads = [];
   try { pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : []; } catch (e) { pads = []; }
+  if (PADS.index != null || PADS.exclude) {
+    const on = pads.filter(p => p && p.connected !== false);
+    const mine = PADS.index != null ? on.find(p => p.index === PADS.index) : on.find(p => PADS.exclude.indexOf(p.index) < 0);
+    pads = mine ? [mine] : [];
+  }
   padCount = 0;
   for (const p of pads) {
     if (!p) continue;

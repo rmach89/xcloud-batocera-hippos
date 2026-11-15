@@ -1,7 +1,8 @@
 'use strict';
 // Xbox Cloud Gaming for Batocera: a fullscreen window that only opens
 // xbox.com/play and Microsoft sign-in. Everything else is blocked.
-const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, powerSaveBlocker, nativeImage, net } = require('electron');
+const electron = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, powerSaveBlocker, nativeImage, net } = electron;
 const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -78,6 +79,16 @@ const DEFAULTS = {
   no_feedback: false,        // no "how was it?" questions after a game
   reduce_anim: false,        // fewer animations on the dashboard (smoother on slower devices)
   no_analytics: false,       // don't send Xbox's usage statistics
+  upscale_target: 'screen',  // the upscaler's size: 'screen', '1080', '1440' or '2160' (4K)
+  upscale_sharp: 60,         // the upscaler's sharpening, 0-100%
+  video_cleanup: false,      // soften compression blocks in flat areas of the picture (graphics chip)
+  stream_steady: false,      // ask Xbox to keep the bitrate up for the chosen resolution
+  picture_per_game: false,   // quick settings saves the picture settings for the game being played
+  split_players: 0,          // split screen: 0 (off), 2, 3 or 4 players, each with their own Xbox sign-in and controller
+  split_remember: false,     // split screen: players 2-4's guest sign-ins kept for next time (otherwise forgotten when the app closes)
+  replay: false,             // instant replay: keep the last 30 seconds of a game, saved from quick settings
+  keep_alive: false,         // answer Xbox's "are you still there?" during a game
+  auto_reconnect: true,      // a dropped stream: press Xbox's own reconnect button
   language: 'auto',          // 'auto' = the same as Batocera
   controller_fix: true,      // put controllers the browser doesn't know (Steam Deck...) in the Xbox layout
   game_list: 'off',          // EmulationStation's Xbox Cloud list: 'off' (just the app), 'all' cloud games, 'free' (free with ads) or 'picked' ones
@@ -97,6 +108,23 @@ const UNLOCK = { au: '203.41.44.20', br: '200.221.11.101', eu: '194.25.0.68', jp
 const UNLOCK_CODES = ['off'].concat(Object.keys(UNLOCK));
 // the 4K upscaler is for 64-bit PCs (x86-64) only
 const X64 = process.arch === 'x64';
+const UP_TARGETS = ['screen', '1080', '1440', '2160'];
+const SPLITS = [0, 2, 3, 4];
+// the picture settings a game can have of its own (Picture settings per game)
+const PIC_KEYS = ['video_sharpen', 'clarity_boost', 'video_contrast', 'video_saturation', 'video_brightness', 'upscale_4k', 'upscale_target', 'upscale_sharp', 'video_cleanup'];
+const GAME_PIC = path.join(HOME, 'game-picture.json');
+function gamePics() { try { return JSON.parse(fs.readFileSync(GAME_PIC, 'utf8')) || {}; } catch (e) { return {}; } }
+function picOwner() { return curProfile ? curProfile.id : '_'; }
+// the game on the dashboard now (its Store ID), from /launch/<name>/<ID>
+function streamingGame() {
+  try { const m = /\/launch\/[^/]+\/([0-9A-Z]{12})/i.exec(new URL(mainWin.webContents.getURL()).pathname); return m ? m[1].toUpperCase() : ''; } catch (e) { return ''; }
+}
+// cfg with the playing game's own picture settings on top (when there are any)
+function picCfg() {
+  if (!cfg.picture_per_game) return cfg;
+  const g = streamingGame(), own = g && (gamePics()[picOwner()] || {})[g];
+  return own ? Object.assign({}, cfg, own) : cfg;
+}
 // Xbox's usage statistics and error reports (Disable analytics)
 const ANALYTICS_URLS = ['*://arc.msn.com/*', '*://browser.events.data.microsoft.com/*', '*://dc.services.visualstudio.com/*', '*://*.ingest.sentry.io/*',
   '*://js.monitor.azure.com/*', '*://*.clarity.ms/*'];
@@ -107,10 +135,13 @@ function pictureLevel(v) { const n = Number(v); return Number.isFinite(n) ? Math
 let STREAM_JS = '';
 try { STREAM_JS = fs.readFileSync(path.join(__dirname, 'stream.js'), 'utf8'); } catch (e) { /* logged at startup */ }
 function streamCfg() {
-  return { res: cfg.stream_resolution, sharpen: SHARPEN.indexOf(cfg.video_sharpen), clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration,
-    contrast: cfg.video_contrast, saturation: cfg.video_saturation, brightness: cfg.video_brightness,
+  const pc = picCfg();
+  return { res: cfg.stream_resolution, sharpen: SHARPEN.indexOf(pc.video_sharpen), clarity: pc.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration,
+    contrast: pc.video_contrast, saturation: pc.video_saturation, brightness: pc.video_brightness,
+    upTarget: pc.upscale_target, upSharp: pc.upscale_sharp, clean: pc.video_cleanup, steady: cfg.stream_steady,
+    alive: cfg.keep_alive, reconnect: cfg.auto_reconnect,
     boost: cfg.audio_boost, vol: appVolume(), ipv6: cfg.prefer_ipv6, wait: cfg.wait_time, mic: cfg.mic_on_launch,
-    up: cfg.upscale_4k && X64, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim,
+    up: pc.upscale_4k && X64, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim,
     waitT: { label: i18n.t(cfg.language, 'waitLabel'), none: i18n.t(cfg.language, 'waitNone'), min: i18n.t(cfg.language, 'waitMin') } };
 }
 function streamScript() {
@@ -185,6 +216,12 @@ function loadConfig(profileId) {
   cfg.audio_boost = Number.isFinite(boost) ? Math.round(Math.min(600, Math.max(100, boost)) / 50) * 50 : 100;
   for (const k of ['prefer_ipv6', 'mic_on_launch', 'touch_controller', 'no_social', 'upscale_4k', 'skip_splash', 'no_feedback', 'reduce_anim', 'no_analytics']) cfg[k] = cfg[k] === true;
   cfg.wait_time = cfg.wait_time !== false;
+  for (const k of ['video_cleanup', 'stream_steady', 'picture_per_game', 'split_remember', 'replay', 'keep_alive']) cfg[k] = cfg[k] === true;
+  cfg.auto_reconnect = cfg.auto_reconnect !== false;
+  cfg.upscale_target = UP_TARGETS.includes(String(cfg.upscale_target)) ? String(cfg.upscale_target) : 'screen';
+  const us = Number(cfg.upscale_sharp);
+  cfg.upscale_sharp = Number.isFinite(us) ? Math.round(Math.min(100, Math.max(0, us)) / 10) * 10 : 60;
+  cfg.split_players = SPLITS.includes(Number(cfg.split_players)) ? Number(cfg.split_players) : 0;
   cfg.region_unlock = UNLOCK_CODES.includes(cfg.region_unlock) ? cfg.region_unlock : 'off';
   const iv = Number(cfg.intro_volume);
   cfg.intro_volume = Number.isFinite(iv) ? Math.round(Math.min(100, Math.max(0, iv))) : DEFAULTS.intro_volume;
@@ -338,6 +375,7 @@ function fastExit(reason) {
   exiting = true;
   log(`exit requested (${reason})`);
   try { if (mainWin) mainWin.hide(); } catch (e) { /* ignore */ }  // get off the screen right away
+  try { flushPlayed(); } catch (e) { /* ignore */ }
   const ses = curSession();
   // Settings > Sign out when closing: forget the Xbox sign-in on the way out
   // (not when only the F1 Settings shortcut was open)
@@ -678,7 +716,8 @@ function settingsHtml() {
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glFree', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpFree', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
     'unlockT', 'unlockHelp', 'unlockEu', 'boostT', 'boostHelp', 'socialT', 'socialHelp', 'ipv6T', 'ipv6Help', 'micT', 'micHelp', 'waitT', 'waitHelp', 'touchT', 'touchHelp',
-    'secDash', 'upT', 'upHelp', 'splashT', 'splashHelp', 'fbT', 'fbHelp', 'animT', 'animHelp', 'anaT', 'anaHelp',
+    'secDash', 'upT', 'upHelp', 'utT', 'utHelp', 'utScreen', 'usT', 'usHelp', 'cleanT', 'cleanHelp', 'steadyT', 'steadyHelp', 'pgT', 'pgHelp', 'splitT', 'splitHelp', 'splitN', 'remT', 'remHelp', 'replayT', 'replayHelp', 'aliveT', 'aliveHelp', 'reconT', 'reconHelp',
+    'netT', 'netHelp', 'netBtn', 'netBusy', 'netResult', 'netFail', 'battT', 'battHelp', 'battNone', 'splashT', 'splashHelp', 'fbT', 'fbHelp', 'animT', 'animHelp', 'anaT', 'anaHelp',
     'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b', 'c10a', 'c10b', 'c11a', 'c11b'];
   const T = {};
   for (const [code] of i18n.LANGS) {
@@ -695,7 +734,8 @@ function settingsHtml() {
     res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration,
     pic: { ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness },
     unlock: cfg.region_unlock, unlocks: UNLOCK_CODES, boost: cfg.audio_boost, social: cfg.no_social, ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller,
-    x64: X64, up: cfg.upscale_4k, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim, ana: cfg.no_analytics,
+    x64: X64, up: cfg.upscale_4k, ut: cfg.upscale_target, us: cfg.upscale_sharp, clean: cfg.video_cleanup, steady: cfg.stream_steady, pg: cfg.picture_per_game, split: cfg.split_players,
+    rem: cfg.split_remember, replay: cfg.replay, alive: cfg.keep_alive, recon: cfg.auto_reconnect, batt: batteries(), net: null, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim, ana: cfg.no_analytics,
     ivol: cfg.intro_volume, imute: cfg.intro_muted,
     engine: process.versions.electron, appv: VERSION, upd,
     glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun, glPct,
@@ -833,6 +873,10 @@ function settingsHtml() {
     <div><div class="label" data-k="resT"></div><div class="help" id="res-help"></div></div>
     <div class="picker"><span class="arrow" id="rsprev">&#9664;</span><span class="value" id="res" style="width:220px"></span><span class="arrow" id="rsnext">&#9654;</span></div>
   </div>
+  <div class="row" id="row-net">
+    <div><div class="label" data-k="netT"></div><div class="help" id="net-help"></div></div>
+    <span class="chip" id="net-chip"><span id="net"></span></span>
+  </div>
   <div class="row" id="row-windows">
     <div><div class="label" data-k="winT"></div><div class="help" data-k="winHelp"></div></div>
     <div class="picker"><span class="state" id="windows-state"></span><span class="toggle" id="windows"></span></div>
@@ -849,6 +893,22 @@ function settingsHtml() {
     <div><div class="label" data-k="micT"></div><div class="help" data-k="micHelp"></div></div>
     <div class="picker"><span class="state" id="mic-state"></span><span class="toggle" id="mic"></span></div>
   </div>
+  <div class="row" id="row-steady">
+    <div><div class="label" data-k="steadyT"></div><div class="help" data-k="steadyHelp"></div></div>
+    <div class="picker"><span class="state" id="steady-state"></span><span class="toggle" id="steady"></span></div>
+  </div>
+  <div class="row" id="row-recon">
+    <div><div class="label" data-k="reconT"></div><div class="help" data-k="reconHelp"></div></div>
+    <div class="picker"><span class="state" id="recon-state"></span><span class="toggle" id="recon"></span></div>
+  </div>
+  <div class="row" id="row-alive">
+    <div><div class="label" data-k="aliveT"></div><div class="help" data-k="aliveHelp"></div></div>
+    <div class="picker"><span class="state" id="alive-state"></span><span class="toggle" id="alive"></span></div>
+  </div>
+  <div class="row" id="row-replay">
+    <div><div class="label" data-k="replayT"></div><div class="help" data-k="replayHelp"></div></div>
+    <div class="picker"><span class="state" id="replay-state"></span><span class="toggle" id="replay"></span></div>
+  </div>
   <div class="row" id="row-stats">
     <div><div class="label" data-k="statsT"></div><div class="help" data-k="statsHelp"></div></div>
     <div class="picker"><span class="state" id="stats-state"></span><span class="toggle" id="stats"></span></div>
@@ -861,6 +921,18 @@ function settingsHtml() {
   <div class="row" id="row-up" style="display:${X64 ? 'flex' : 'none'}">
     <div><div class="label" data-k="upT"></div><div class="help" data-k="upHelp"></div></div>
     <div class="picker"><span class="state" id="up-state"></span><span class="toggle" id="up"></span></div>
+  </div>
+  <div class="row" id="row-ut" style="display:none">
+    <div><div class="label" data-k="utT"></div><div class="help" data-k="utHelp"></div></div>
+    <div class="picker"><span class="arrow" id="utprev">&#9664;</span><span class="value" id="ut" style="width:220px"></span><span class="arrow" id="utnext">&#9654;</span></div>
+  </div>
+  <div class="row" id="row-us" style="display:none">
+    <div><div class="label" data-k="usT"></div><div class="help" data-k="usHelp"></div></div>
+    <div class="picker"><span class="arrow" id="usdown">&minus;</span><span class="bar" style="width:200px"><i id="usbar"></i></span><span class="arrow" id="usup">+</span><span class="pct" id="uspct" style="min-width:96px"></span></div>
+  </div>
+  <div class="row" id="row-clean">
+    <div><div class="label" data-k="cleanT"></div><div class="help" data-k="cleanHelp"></div></div>
+    <div class="picker"><span class="state" id="clean-state"></span><span class="toggle" id="clean"></span></div>
   </div>
   <div class="row" id="row-clarity">
     <div><div class="label" data-k="clT"></div><div class="help" data-k="clHelp"></div></div>
@@ -878,6 +950,10 @@ function settingsHtml() {
     <div><div class="label" data-k="brT"></div><div class="help" data-k="picHelp"></div></div>
     <div class="picker"><span class="arrow" id="brdown">&minus;</span><span class="bar" style="width:200px"><i id="brbar"></i></span><span class="arrow" id="brup">+</span><span class="pct" id="brpct" style="min-width:96px"></span></div>
   </div>
+  <div class="row" id="row-pg">
+    <div><div class="label" data-k="pgT"></div><div class="help" data-k="pgHelp"></div></div>
+    <div class="picker"><span class="state" id="pg-state"></span><span class="toggle" id="pg"></span></div>
+  </div>
   <div class="sec" data-k="secPad"></div>
   <div class="row" id="row-controls">
     <div><div class="label" data-k="ctrlT"></div><div class="help" data-k="ctrlHelp"></div></div>
@@ -890,6 +966,18 @@ function settingsHtml() {
   <div class="row" id="row-touch">
     <div><div class="label" data-k="touchT"></div><div class="help" data-k="touchHelp"></div></div>
     <div class="picker"><span class="state" id="touch-state"></span><span class="toggle" id="touch"></span></div>
+  </div>
+  <div class="row" id="row-batt">
+    <div><div class="label" data-k="battT"></div><div class="help" data-k="battHelp"></div></div>
+    <div class="value" id="batt" style="width:auto;max-width:520px;text-align:right"></div>
+  </div>
+  <div class="row" id="row-split">
+    <div><div class="label" data-k="splitT"></div><div class="help" data-k="splitHelp"></div></div>
+    <div class="picker"><span class="arrow" id="spprev">&#9664;</span><span class="value" id="split" style="width:220px"></span><span class="arrow" id="spnext">&#9654;</span></div>
+  </div>
+  <div class="row" id="row-rem" style="display:none">
+    <div><div class="label" data-k="remT"></div><div class="help" data-k="remHelp"></div></div>
+    <div class="picker"><span class="state" id="rem-state"></span><span class="toggle" id="rem"></span></div>
   </div>
   <div class="sec" data-k="secDash"></div>
   <div class="row" id="row-social">
@@ -977,14 +1065,14 @@ function settingsHtml() {
     // the same order as on screen, section by section
     rows = (S.reload ? ['row-user'] : []).concat(['row-signout', 'row-soe'])
       .concat(['row-region', 'row-unlock', 'row-language', 'row-volume', 'row-boost', 'row-highlight', 'row-intro', 'row-isound'])
-      .concat(['row-res', 'row-windows', 'row-gpu', 'row-ipv6', 'row-mic', 'row-stats'])
-      .concat(['row-sharpen'].concat(S.x64 ? ['row-up'] : []).concat(['row-clarity', 'row-ct', 'row-sa', 'row-br']))
-      .concat(['row-controls', 'row-vib', 'row-touch'])
+      .concat(['row-res', 'row-net', 'row-windows', 'row-gpu', 'row-ipv6', 'row-mic', 'row-steady', 'row-recon', 'row-alive', 'row-replay', 'row-stats'])
+      .concat(['row-sharpen'].concat(S.x64 ? ['row-up'].concat(S.up ? ['row-ut', 'row-us'] : []) : []).concat(['row-clean', 'row-clarity', 'row-ct', 'row-sa', 'row-br', 'row-pg']))
+      .concat(['row-controls', 'row-vib', 'row-touch', 'row-batt', 'row-split'].concat(S.split ? ['row-rem'] : []))
       .concat(['row-social', 'row-wait', 'row-splash', 'row-fb', 'row-anim', 'row-ana'])
       .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : []))
       .concat(S.reload ? ['row-reload'] : []).concat(['row-cache', 'row-logs', 'row-update', 'buttons']);
     LAST = rows.length - 1;
-    ['row-gpick', 'row-g3d'].forEach(function (id) { document.getElementById(id).style.display = rows.indexOf(id) >= 0 ? 'flex' : 'none'; });
+    ['row-gpick', 'row-g3d', 'row-ut', 'row-us', 'row-rem'].forEach(function (id) { document.getElementById(id).style.display = rows.indexOf(id) >= 0 ? 'flex' : 'none'; });
   }
   var copen = false;   // the Controls list is showing
   var row = 0, btn = 0, sent = false, confirmUntil = 0, confirmTimer = null;
@@ -1115,7 +1203,15 @@ function settingsHtml() {
     $('unlock').textContent = unlockName(S.unlocks[ui_]);
     $('bobar').style.width = (S.boost - 100) / 5 + '%';
     $('bopct').textContent = S.boost + '%';
-    ['social', 'ipv6', 'mic', 'wait', 'touch', 'up', 'splash', 'fb', 'anim', 'ana'].forEach(function (k) {
+    $('ut').textContent = S.ut === 'screen' ? tx('utScreen') : S.ut === '2160' ? '4K' : S.ut + 'p';
+    $('usbar').style.width = S.us + '%';
+    $('uspct').textContent = S.us + '%';
+    $('split').textContent = S.split ? tx('splitN', { n: S.split }) : tx('off');
+    $('batt').textContent = S.batt && S.batt.length ? S.batt.map(function (b) { return b.name + ' ' + b.pct + '%' + (b.charging ? ' \u26a1' : ''); }).join('  \u00b7  ') : tx('battNone');
+    var nt = S.net;
+    $('net').textContent = nt === 'busy' ? tx('netBusy') : tx('netBtn');
+    $('net-help').textContent = nt && nt !== 'busy' ? (nt.fail ? tx('netFail') : tx('netResult', { d: nt.mbps, p: nt.ping, r: tx({ auto: 'resAuto', '1080p': 'res1080', '1080p-hq': 'resHq', '1440p': 'res1440' }[nt.rec]) })) : tx('netHelp');
+    ['social', 'ipv6', 'mic', 'wait', 'touch', 'up', 'splash', 'fb', 'anim', 'ana', 'clean', 'steady', 'pg', 'rem', 'replay', 'alive', 'recon'].forEach(function (k) {
       $(k).className = 'toggle' + (S[k] ? ' yes' : '');
       $(k + '-state').textContent = S[k] ? tx('on') : tx('off');
     });
@@ -1150,12 +1246,23 @@ function settingsHtml() {
        '&res=' + RES[rsi] + '&sharpen=' + SH[shi] + '&clarity=' + (S.clarity ? 1 : 0) + '&ct=' + S.pic.ct + '&sa=' + S.pic.sa + '&br=' + S.pic.br + '&gpu=' + (S.gpu ? 1 : 0) + '&stats=' + (S.stats ? 1 : 0) + '&vib=' + S.vib +
        '&unlock=' + S.unlocks[ui_] + '&boost=' + S.boost + '&social=' + (S.social ? 1 : 0) + '&ipv6=' + (S.ipv6 ? 1 : 0) + '&mic=' + (S.mic ? 1 : 0) + '&wait=' + (S.wait ? 1 : 0) + '&touch=' + (S.touch ? 1 : 0) +
        '&up=' + (S.up ? 1 : 0) + '&splash=' + (S.splash ? 1 : 0) + '&fb=' + (S.fb ? 1 : 0) + '&anim=' + (S.anim ? 1 : 0) + '&ana=' + (S.ana ? 1 : 0) +
+       '&ut=' + S.ut + '&us=' + S.us + '&clean=' + (S.clean ? 1 : 0) + '&steady=' + (S.steady ? 1 : 0) + '&pg=' + (S.pg ? 1 : 0) + '&split=' + S.split +
+       '&rem=' + (S.rem ? 1 : 0) + '&replay=' + (S.replay ? 1 : 0) + '&alive=' + (S.alive ? 1 : 0) + '&recon=' + (S.recon ? 1 : 0) +
        '&ivol=' + S.ivol + '&imute=' + (S.imute ? 1 : 0) + '&vmute=' + (S.vmute ? 1 : 0) + '&soe=' + (S.soe ? 1 : 0) + '&glist=' + GL[gi] + '&g3d=' + (S.g3d ? 1 : 0) +
          (S.game ? '&gid=' + S.game.id + '&gslug=' + encodeURIComponent(S.game.slug) + '&gpick=' + (S.gpicked ? 1 : 0) : ''));
   }
   function cancel() { go('settings-cancel'); }
   // Updates: one press checks the app and the engine and gets whatever is
   // newer by itself; it's used the next time the app opens
+  // the connection check: download speed and ping, and the resolution they suit
+  // (A again, once there's a result: use it)
+  function netTest() {
+    if (S.net === 'busy') return;
+    if (S.net && !S.net.fail && S.net.rec) { rsi = Math.max(0, RES.indexOf(S.net.rec)); row = rows.indexOf('row-res'); S.net = null; render(); return; }
+    S.net = 'busy'; render();
+    location.href = '${ACTION_PREFIX}settings-nettest';
+  }
+  window.__netResult = function (r) { S.net = r; render(); };
   function update() {
     var st = (S.upd || {}).state || 'idle';
     if (st !== 'idle' && st !== 'none' && st !== 'fail') return;
@@ -1218,7 +1325,17 @@ function settingsHtml() {
     else if (r === 'row-mic') S.mic = !S.mic;
     else if (r === 'row-wait') S.wait = !S.wait;
     else if (r === 'row-touch') S.touch = !S.touch;
-    else if (r === 'row-up') S.up = !S.up;
+    else if (r === 'row-up') { S.up = !S.up; buildRows(); row = rows.indexOf('row-up'); }
+    else if (r === 'row-ut') { var UT = ['screen', '1080', '1440', '2160']; S.ut = UT[(UT.indexOf(S.ut) + step + UT.length) % UT.length]; }
+    else if (r === 'row-us') S.us = Math.min(100, Math.max(0, S.us + step * 10));
+    else if (r === 'row-clean') S.clean = !S.clean;
+    else if (r === 'row-steady') S.steady = !S.steady;
+    else if (r === 'row-pg') S.pg = !S.pg;
+    else if (r === 'row-split') { var SP = [0, 2, 3, 4]; S.split = SP[(SP.indexOf(S.split) + step + SP.length) % SP.length]; buildRows(); row = rows.indexOf('row-split'); }
+    else if (r === 'row-rem') S.rem = !S.rem;
+    else if (r === 'row-replay') S.replay = !S.replay;
+    else if (r === 'row-alive') S.alive = !S.alive;
+    else if (r === 'row-recon') S.recon = !S.recon;
     else if (r === 'row-splash') S.splash = !S.splash;
     else if (r === 'row-fb') S.fb = !S.fb;
     else if (r === 'row-anim') S.anim = !S.anim;
@@ -1242,9 +1359,11 @@ function settingsHtml() {
     if (r === 'row-cache') { clearCache(); return; }
     if (r === 'row-logs') { saveLogs(); return; }
     if (r === 'row-update') { update(); return; }
+    if (r === 'row-net') { netTest(); return; }
     if (r === 'row-isound') { S.imute = !S.imute; render(); return; }   // A / Enter: mute or unmute
     if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { S.pic[r.slice(4)] = 100; render(); return; }   // A / Enter: back to 100%
     if (r === 'row-boost') { S.boost = 100; render(); return; }   // A / Enter: no boost
+    if (r === 'row-us') { S.us = 60; render(); return; }          // A / Enter: the usual sharpening
     change(1);
   }
   window.addEventListener('keydown', function (e) {
@@ -1280,14 +1399,17 @@ function settingsHtml() {
   arrow('vbdown', 'row-vib', -1); arrow('vbup', 'row-vib', 1);
   arrow('ulprev', 'row-unlock', -1); arrow('ulnext', 'row-unlock', 1);
   arrow('bodown', 'row-boost', -1); arrow('boup', 'row-boost', 1);
+  arrow('utprev', 'row-ut', -1); arrow('utnext', 'row-ut', 1);
+  arrow('usdown', 'row-us', -1); arrow('usup', 'row-us', 1);
+  arrow('spprev', 'row-split', -1); arrow('spnext', 'row-split', 1);
   ['ct', 'sa', 'br'].forEach(function (k) { arrow(k + 'down', 'row-' + k, -1); arrow(k + 'up', 'row-' + k, 1); });
   $('vmute').addEventListener('click', function (e) { e.stopPropagation(); row = rowOf('row-volume'); S.vmute = !S.vmute; render(); if (!S.vmute) beep(); });
   $('imute').addEventListener('click', function (e) { e.stopPropagation(); row = rowOf('row-isound'); S.imute = !S.imute; render(); });
   $('row-isound').addEventListener('click', function () { row = rowOf('row-isound'); render(); });
-  ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist', 'row-res', 'row-sharpen', 'row-vib', 'row-ct', 'row-sa', 'row-br', 'row-unlock', 'row-boost'].forEach(function (id) {
+  ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist', 'row-res', 'row-sharpen', 'row-vib', 'row-ct', 'row-sa', 'row-br', 'row-unlock', 'row-boost', 'row-ut', 'row-us', 'row-split'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); render(); });
   });
-  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d', 'row-social', 'row-ipv6', 'row-mic', 'row-wait', 'row-touch', 'row-up', 'row-splash', 'row-fb', 'row-anim', 'row-ana'].forEach(function (id) {
+  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d', 'row-social', 'row-ipv6', 'row-mic', 'row-wait', 'row-touch', 'row-up', 'row-splash', 'row-fb', 'row-anim', 'row-ana', 'row-clean', 'row-steady', 'row-pg', 'row-rem', 'row-replay', 'row-alive', 'row-recon'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); change(1); });
   });
   $('row-reload').addEventListener('click', function () { row = rowOf('row-reload'); render(); reload(); });
@@ -1297,6 +1419,7 @@ function settingsHtml() {
   $('row-user').addEventListener('click', function () { row = rowOf('row-user'); render(); location.href = '${ACTION_PREFIX}settings-profiles'; });
   $('row-controls').addEventListener('click', function () { row = rowOf('row-controls'); openControls(); });
   $('row-update').addEventListener('click', function () { row = rowOf('row-update'); render(); update(); });
+  $('row-net').addEventListener('click', function () { row = rowOf('row-net'); render(); netTest(); });
   $('cback').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); closeControls(); });
   $('save').addEventListener('click', function (e) { e.preventDefault(); save(); });
   $('cancel').addEventListener('click', function (e) { e.preventDefault(); cancel(); });
@@ -1388,8 +1511,16 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
   if (VIBRATION.includes(stream.vib)) obj.vibration = cfg.vibration = stream.vib;
   if (UNLOCK_CODES.includes(stream.unlock)) obj.region_unlock = cfg.region_unlock = stream.unlock;
   if (BOOST.includes(stream.boost)) obj.audio_boost = cfg.audio_boost = stream.boost;
+  if (UP_TARGETS.includes(stream.ut)) obj.upscale_target = cfg.upscale_target = stream.ut;
+  if (Number.isFinite(stream.us) && stream.us >= 0 && stream.us <= 100) obj.upscale_sharp = cfg.upscale_sharp = Math.round(stream.us / 10) * 10;
+  // split screen belongs to the machine (like GPU acceleration): config.json, next start
+  let splitChanged = false;
+  if (SPLITS.includes(stream.split)) { splitChanged = stream.split !== cfg.split_players; obj.split_players = cfg.split_players = stream.split; }
+  if (typeof stream.rem === 'boolean') { splitChanged = splitChanged || stream.rem !== cfg.split_remember; obj.split_remember = cfg.split_remember = stream.rem; }
   for (const [k, q] of [['no_social', 'social'], ['prefer_ipv6', 'ipv6'], ['mic_on_launch', 'mic'], ['wait_time', 'wait'], ['touch_controller', 'touch'],
-    ['upscale_4k', 'up'], ['skip_splash', 'splash'], ['no_feedback', 'fb'], ['reduce_anim', 'anim'], ['no_analytics', 'ana']]) {
+    ['upscale_4k', 'up'], ['skip_splash', 'splash'], ['no_feedback', 'fb'], ['reduce_anim', 'anim'], ['no_analytics', 'ana'],
+    ['video_cleanup', 'clean'], ['stream_steady', 'steady'], ['picture_per_game', 'pg'],
+    ['replay', 'replay'], ['keep_alive', 'alive'], ['auto_reconnect', 'recon']]) {
     if (typeof stream[q] === 'boolean') obj[k] = cfg[k] = stream[q];
   }
   if (language === 'auto' || (language && i18n.STRINGS[language])) {
@@ -1408,17 +1539,22 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
         video_contrast: cfg.video_contrast, video_saturation: cfg.video_saturation, video_brightness: cfg.video_brightness, stream_stats: cfg.stream_stats, vibration: cfg.vibration,
         region_unlock: cfg.region_unlock, audio_boost: cfg.audio_boost, no_social: cfg.no_social, prefer_ipv6: cfg.prefer_ipv6,
         mic_on_launch: cfg.mic_on_launch, wait_time: cfg.wait_time, touch_controller: cfg.touch_controller,
-        upscale_4k: cfg.upscale_4k, skip_splash: cfg.skip_splash, no_feedback: cfg.no_feedback, reduce_anim: cfg.reduce_anim, no_analytics: cfg.no_analytics
+        upscale_4k: cfg.upscale_4k, skip_splash: cfg.skip_splash, no_feedback: cfg.no_feedback, reduce_anim: cfg.reduce_anim, no_analytics: cfg.no_analytics,
+        upscale_target: cfg.upscale_target, upscale_sharp: cfg.upscale_sharp, video_cleanup: cfg.video_cleanup, stream_steady: cfg.stream_steady, picture_per_game: cfg.picture_per_game,
+        replay: cfg.replay, keep_alive: cfg.keep_alive, auto_reconnect: cfg.auto_reconnect
       });
-      if (gpuChanged) {
+      if (gpuChanged || splitChanged) {
         let base = {};
         try { base = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) { /* none or broken: start fresh */ }
         base.gpu_acceleration = cfg.gpu_acceleration;
+        base.split_players = cfg.split_players;
+        base.split_remember = cfg.split_remember;
         fs.writeFileSync(CONFIG, JSON.stringify(base, null, 2) + '\n');
       }
     } else fs.writeFileSync(CONFIG, JSON.stringify(obj, null, 2) + '\n');
     if (gpuChanged) log(`GPU acceleration turned ${cfg.gpu_acceleration ? 'on' : 'off'}: it applies the next time the app opens`);
-    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, region unlock ${cfg.region_unlock}, volume boost ${cfg.audio_boost}%, social ${cfg.no_social ? 'off' : 'on'}, prefer IPv6 ${cfg.prefer_ipv6 ? 'on' : 'off'}, microphone on launch ${cfg.mic_on_launch ? 'on' : 'off'}, wait time ${cfg.wait_time ? 'on' : 'off'}, touch controller ${cfg.touch_controller ? 'on' : 'off'}, 4K upscaling ${cfg.upscale_4k ? 'on' : 'off'}${X64 ? '' : ' (not on this machine)'}, skip splash ${cfg.skip_splash ? 'on' : 'off'}, post-game feedback ${cfg.no_feedback ? 'off' : 'on'}, reduce animations ${cfg.reduce_anim ? 'on' : 'off'}, analytics ${cfg.no_analytics ? 'off' : 'on'}, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
+    if (splitChanged) log(`split screen ${cfg.split_players ? cfg.split_players + ' players' : 'off'}: it applies the next time the app opens`);
+    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, region unlock ${cfg.region_unlock}, volume boost ${cfg.audio_boost}%, social ${cfg.no_social ? 'off' : 'on'}, prefer IPv6 ${cfg.prefer_ipv6 ? 'on' : 'off'}, microphone on launch ${cfg.mic_on_launch ? 'on' : 'off'}, wait time ${cfg.wait_time ? 'on' : 'off'}, touch controller ${cfg.touch_controller ? 'on' : 'off'}, 4K upscaling ${cfg.upscale_4k ? 'on' : 'off'}${X64 ? '' : ' (not on this machine)'}, skip splash ${cfg.skip_splash ? 'on' : 'off'}, post-game feedback ${cfg.no_feedback ? 'off' : 'on'}, reduce animations ${cfg.reduce_anim ? 'on' : 'off'}, analytics ${cfg.no_analytics ? 'off' : 'on'}, upscaling to ${cfg.upscale_target} at ${cfg.upscale_sharp}% sharpness, clean-up ${cfg.video_cleanup ? 'on' : 'off'}, steady quality ${cfg.stream_steady ? 'on' : 'off'}, picture per game ${cfg.picture_per_game ? 'on' : 'off'}, split screen ${cfg.split_players || 'off'}${cfg.split_players ? (cfg.split_remember ? ' (players remembered)' : ' (players forgotten on exit)') : ''}, instant replay ${cfg.replay ? 'on' : 'off'}, stay connected ${cfg.keep_alive ? 'on' : 'off'}, auto-reconnect ${cfg.auto_reconnect ? 'on' : 'off'}, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
   } catch (e) {
     log(`could not save settings: ${e.message}`);
   }
@@ -2063,7 +2199,7 @@ const PAD_EVENTS = `(function(){
     if (!fn || (typeof fn !== 'function' && typeof fn.handleEvent !== 'function')) return fn;
     var w = wrapped.get(fn);
     if (!w && make) {
-      w = function (e) { var x = wrapEvent(e); return typeof fn === 'function' ? fn.call(this, x) : fn.handleEvent(x); };
+      w = function (e) { if (window.__xcloudMine && !window.__xcloudMine(e.gamepad)) return; var x = wrapEvent(e); return typeof fn === 'function' ? fn.call(this, x) : fn.handleEvent(x); };
       wrapped.set(fn, w);
     }
     return w || fn;
@@ -2179,8 +2315,23 @@ const PAD_GATE = `(function(){
         vpadUp = up;
       }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-xcloud-vpad'] });
     } catch (e) { /* ignore */ }
+    // split screen: this player's controller only (the n-th one connected),
+    // shown to Xbox as the first
+    // (__xcloudPadIndex: this player's controller; __xcloudPadExclude: player
+    // 1's page gets the first controller not taken by the others)
+    function mine(list) {
+      var idx = window.__xcloudPadIndex, ex = window.__xcloudPadExclude;
+      if (idx == null && !ex) return list;
+      var on = Array.prototype.filter.call(list, function (p) { return p && p.connected !== false; });
+      var p = null;
+      for (var i = 0; i < on.length && !p; i++) if (idx != null ? on[i].index === idx : (ex || []).indexOf(on[i].index) < 0) p = on[i];
+      var out = [null, null, null, null];
+      if (p) out[0] = p;
+      return out;
+    }
+    window.__xcloudMine = function (p) { if (window.__xcloudPadIndex == null && !window.__xcloudPadExclude) return true; var m = mine(real.call(navigator))[0]; return !!(m && p && m.index === p.index); };
     Navigator.prototype.getGamepads = function () {
-      var pads = Array.prototype.map.call(real.call(this), function (p) { return window.__xcloudShowPad(p); });
+      var pads = Array.prototype.map.call(mine(real.call(this)), function (p) { return window.__xcloudShowPad(p); });
       if (vpadUp || (document.documentElement && document.documentElement.getAttribute('data-xcloud-vpad'))) {
         pads = Array.prototype.slice.call(pads);
         while (pads.length < 4) pads.push(null);
@@ -2213,23 +2364,38 @@ let padWatchLast = '', padReleaseSince = 0, padAnnounced = 0;
 // once; they're saved when it closes.
 let qpOpen = false;
 function qpState() {
-  return { volume: cfg.volume, muted: cfg.muted, boost: cfg.audio_boost, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost,
-    sa: cfg.video_saturation, ct: cfg.video_contrast, br: cfg.video_brightness };
+  const pc = picCfg(), g = cfg.picture_per_game ? streamingGame() : '';
+  return { replay: cfg.replay, stats: cfg.stream_stats, volume: cfg.volume, muted: cfg.muted, boost: cfg.audio_boost, sharpen: pc.video_sharpen, clarity: pc.clarity_boost,
+    sa: pc.video_saturation, ct: pc.video_contrast, br: pc.video_brightness,
+    x64: X64, up: pc.upscale_4k, upTarget: pc.upscale_target, upSharp: pc.upscale_sharp, clean: pc.video_cleanup, game: g };
 }
+// what quick settings changes: in cfg, or (Picture settings per game) in the game's own settings
+let qpGamePic = null;
+function qpPic() { return qpGamePic || cfg; }
 function qpSave() {
+  if (qpGamePic) {
+    const g = qpGamePic.__game, all = gamePics(), own = all[picOwner()] = all[picOwner()] || {};
+    own[g] = Object.fromEntries(PIC_KEYS.map(k => [k, qpGamePic[k]]));
+    try { fs.writeFileSync(GAME_PIC, JSON.stringify(all, null, 2) + '\n'); log(`picture settings saved for this game (${g})`); } catch (e) { log(`couldn't save this game's picture settings: ${e.message}`); }
+    qpGamePic = null;
+  }
   saveSettings(currentRegion(), cfg.volume, cfg.keyboard_highlight, cfg.languageChoice, cfg.introMode, cfg.stream_as_windows,
     cfg.intro_volume, cfg.intro_muted, cfg.muted, cfg.sign_out_on_exit,
     { res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness,
       stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration, unlock: cfg.region_unlock, boost: cfg.audio_boost, social: cfg.no_social,
       ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller,
-      up: cfg.upscale_4k, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim, ana: cfg.no_analytics });
+      up: cfg.upscale_4k, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim, ana: cfg.no_analytics,
+      ut: cfg.upscale_target, us: cfg.upscale_sharp, clean: cfg.video_cleanup, steady: cfg.stream_steady, pg: cfg.picture_per_game, split: cfg.split_players,
+      rem: cfg.split_remember, replay: cfg.replay, alive: cfg.keep_alive, recon: cfg.auto_reconnect });
 }
 ipcMain.on('xcloud-qp', (event, open) => {
   qpOpen = !!open;
   const wc = event.sender;
   wc.executeJavaScript(`${PAD_GATE} window.__xcloudPadsBlocked = ${qpOpen ? 'true' : "'release'"};`).catch(() => { /* page between loads */ });
   if (qpOpen) {
-    log('quick settings opened in a game');
+    const g = cfg.picture_per_game ? streamingGame() : '';
+    qpGamePic = g ? Object.assign({ __game: g }, picCfg()) : null;
+    log(`quick settings opened in a game${g ? ` (picture settings for ${g})` : ''}`);
     try { fs.writeFileSync(QP_HINT_FILE, String(QP_HINT_MAX)); } catch (e) { /* ignore */ }
     try { wc.send('xcloud-qp-state', qpState()); } catch (e) { /* ignore */ }
   }
@@ -2268,10 +2434,21 @@ ipcMain.on('xcloud-qp-set', (event, m) => {
   const k = m && m.k, v = m && m.v, n = Number(v);
   if (k === 'volume' && Number.isFinite(n)) { cfg.volume = Math.round(Math.min(100, Math.max(0, n))); cfg.muted = false; }
   else if (k === 'boost' && BOOST.includes(n)) cfg.audio_boost = n;
-  else if (k === 'sharpen' && SHARPEN.includes(v)) cfg.video_sharpen = v;
-  else if (k === 'clarity') cfg.clarity_boost = v === true;
-  else if (k === 'sa' || k === 'ct' || k === 'br') cfg[{ sa: 'video_saturation', ct: 'video_contrast', br: 'video_brightness' }[k]] = pictureLevel(n);
+  else if (k === 'stats') cfg.stream_stats = v === true;
+  else if (k === 'sharpen' && SHARPEN.includes(v)) qpPic().video_sharpen = v;
+  else if (k === 'clarity') qpPic().clarity_boost = v === true;
+  else if (k === 'sa' || k === 'ct' || k === 'br') qpPic()[{ sa: 'video_saturation', ct: 'video_contrast', br: 'video_brightness' }[k]] = pictureLevel(n);
+  else if (k === 'up' && X64) qpPic().upscale_4k = v === true;
+  else if (k === 'upTarget' && UP_TARGETS.includes(v)) qpPic().upscale_target = v;
+  else if (k === 'upSharp' && Number.isFinite(n)) qpPic().upscale_sharp = Math.round(Math.min(100, Math.max(0, n)) / 10) * 10;
+  else if (k === 'clean') qpPic().video_cleanup = v === true;
   else return;
+  // per game: the stream gets the game's settings straight away
+  if (qpGamePic) {
+    const all = gamePics(), own = all[picOwner()] = all[picOwner()] || {};
+    own[qpGamePic.__game] = Object.fromEntries(PIC_KEYS.map(q => [q, qpGamePic[q]]));
+    try { fs.writeFileSync(GAME_PIC, JSON.stringify(all, null, 2) + '\n'); } catch (e) { /* saved on close */ }
+  }
   applyStreamOptions(event.sender);
   if (k === 'volume') { try { event.sender.send('xcloud-volume', appVolume()); } catch (e) { /* ignore */ } }
 });
@@ -2496,10 +2673,15 @@ function handleAction(wc, url) {
         social: q.has('social') ? q.get('social') === '1' : undefined, ipv6: q.has('ipv6') ? q.get('ipv6') === '1' : undefined,
         mic: q.has('mic') ? q.get('mic') === '1' : undefined, wait: q.has('wait') ? q.get('wait') === '1' : undefined, touch: q.has('touch') ? q.get('touch') === '1' : undefined,
         up: q.has('up') ? q.get('up') === '1' : undefined, splash: q.has('splash') ? q.get('splash') === '1' : undefined, fb: q.has('fb') ? q.get('fb') === '1' : undefined,
-        anim: q.has('anim') ? q.get('anim') === '1' : undefined, ana: q.has('ana') ? q.get('ana') === '1' : undefined });
+        anim: q.has('anim') ? q.get('anim') === '1' : undefined, ana: q.has('ana') ? q.get('ana') === '1' : undefined,
+        ut: q.get('ut'), us: q.has('us') ? Number(q.get('us')) : undefined, clean: q.has('clean') ? q.get('clean') === '1' : undefined,
+        steady: q.has('steady') ? q.get('steady') === '1' : undefined, pg: q.has('pg') ? q.get('pg') === '1' : undefined, split: q.has('split') ? Number(q.get('split')) : undefined,
+        rem: q.has('rem') ? q.get('rem') === '1' : undefined, replay: q.has('replay') ? q.get('replay') === '1' : undefined,
+        alive: q.has('alive') ? q.get('alive') === '1' : undefined, recon: q.has('recon') ? q.get('recon') === '1' : undefined });
     // the stream options change on the dashboard straight away (the resolution from the next game)
     applyStreamOptions(mainWin && mainWin.webContents);
     try { mainWin && mainWin.webContents.send('xcloud-touch', cfg.touch_controller); } catch (e) { /* ignore */ }
+    try { mainWin && mainWin.webContents.send('xcloud-replay', cfg.replay); } catch (e) { /* ignore */ }
     if (q.has('glist')) saveGameList(q);
     // the new volume (or mute) takes effect straight away
     for (const w of BrowserWindow.getAllWindows ? BrowserWindow.getAllWindows() : []) {
@@ -2540,6 +2722,8 @@ function handleAction(wc, url) {
   else if (action === 'settings-clear-cache') clearAppCache(wc);
   else if (action === 'settings-logs') saveSupportLogs(wc);
   else if (action === 'settings-update-check') checkForUpdates();
+  else if (action === 'settings-nettest') runNetTest(wc);
+  else if (/^join-(pad|pick|leave)$/.test(action)) joinAction(wc, action, u.searchParams);
   else if (action === 'quit') fastExit('app screen');
 }
 
@@ -3551,6 +3735,348 @@ function guard(wc, isLayer) {
   });
 }
 
+// ---------- controller battery (Settings > Controller) ----------
+// What Linux reports for wireless Xbox and PlayStation controllers
+// (/sys/class/power_supply, "Device" scope), and a Steam Deck's own battery.
+const POWER = process.env.XCLOUD_POWER_DIR || '/sys/class/power_supply';
+function sysText(f) { try { return fs.readFileSync(f, 'utf8').trim(); } catch (e) { return ''; } }
+function batteries() {
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(POWER); } catch (e) { return out; }
+  for (const n of names) {
+    const d = path.join(POWER, n), model = sysText(path.join(d, 'model_name')), pct = parseInt(sysText(path.join(d, 'capacity')), 10);
+    if (!Number.isFinite(pct)) continue;
+    const charging = /^charging$/i.test(sysText(path.join(d, 'status')));
+    const label = `${n} ${model}`;
+    if (sysText(path.join(d, 'scope')) === 'Device' || /xpadneo|ps-controller|sony_controller|dualsense|dualshock|xbox/i.test(n)) {
+      if (/xbox|xpadneo|microsoft/i.test(label)) out.push({ name: 'Xbox', pct, charging });
+      else if (/dualsense|ps-controller|sony|dualshock|playstation/i.test(label)) out.push({ name: /dualsense/i.test(label) ? 'DualSense' : 'PlayStation', pct, charging });
+    } else if (/^BAT/i.test(n) && /jupiter|galileo/i.test(sysText(process.env.XCLOUD_DMI_PRODUCT || '/sys/class/dmi/id/product_name'))) {
+      out.push({ name: 'Steam Deck', pct, charging });
+    }
+  }
+  // controllers first (Xbox, then PlayStation), the Steam Deck last
+  const rank = b => (b.name === 'Xbox' ? 0 : b.name === 'Steam Deck' ? 2 : 1);
+  return out.sort((x, y) => rank(x) - rank(y));
+}
+
+// ---------- connection check (Settings > Stream) ----------
+// Download speed (Cloudflare's public speed test, up to 25 MB / 8 seconds) and
+// the ping to Xbox Cloud Gaming's sign-in server, then the resolution they suit.
+function timedGet(url, limitMs) {
+  return new Promise(resolve => {
+    const t0 = Date.now(); let bytes = 0, done = false;
+    const finish = ok => { if (!done) { done = true; resolve({ ok, ms: Date.now() - t0, bytes }); } };
+    try {
+      const req = net.request({ url, method: 'GET' });
+      req.on('response', res => { res.on('data', c => { bytes += c.length; }); res.on('end', () => finish(true)); res.on('error', () => finish(false)); });
+      req.on('error', () => finish(false));
+      req.end();
+      setTimeout(() => { try { req.abort(); } catch (e) { /* ignore */ } finish(bytes > 0); }, limitMs);
+    } catch (e) { finish(false); }
+  });
+}
+async function runNetTest(wc) {
+  const send = r => { try { if (wc && !wc.isDestroyed()) wc.executeJavaScript(`window.__netResult && window.__netResult(${JSON.stringify(r)})`).catch(() => {}); } catch (e) { /* closed */ } };
+  try {
+    const pings = [];
+    for (let i = 0; i < 5; i++) { const r = await timedGet(process.env.XCLOUD_PING_URL || 'https://xgpuweb.gssv-play-prod.xboxlive.com/', 4000); if (r.ok) pings.push(r.ms); }
+    const d = await timedGet(process.env.XCLOUD_SPEED_URL || 'https://speed.cloudflare.com/__down?bytes=25000000', 8000);
+    if (!pings.length || !d.bytes) throw new Error('no answer');
+    pings.sort((a, b) => a - b);
+    const ping = pings[Math.floor((pings.length - 1) / 2)], mbps = Math.round(d.bytes * 8 / (d.ms / 1000) / 1e5) / 10;
+    const rec = mbps >= 45 && ping < 80 ? '1440p' : mbps >= 35 ? '1080p-hq' : mbps >= 25 ? '1080p' : 'auto';
+    log(`connection check: ${mbps} Mb/s, ping ${ping} ms: ${rec} recommended`);
+    send({ mbps, ping, rec });
+  } catch (e) { log(`connection check failed: ${e.message}`); send({ fail: true }); }
+}
+
+// ---------- played from the dashboard: counted in EmulationStation's list ----------
+// EmulationStation counts the games it starts; a game started inside the app
+// is added here (play count, last played, play time) and written to its list
+// a few seconds after the app closes (Sync-GameList.py played).
+const PLAYED = path.join(HOME, 'played.json');
+const played = {};
+let playingNow = null;
+function esTime(d) { const z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}T${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`; }
+ipcMain.on('xcloud-stream', (event, m) => {
+  const on = !!(m && m.on);
+  if (on && !playingNow) {
+    const g = streamingGame();
+    if (!g || g === GAME_ID) return;   // EmulationStation counts the game it started itself
+    playingNow = { g, t: Date.now() };
+    const p = played[g] = played[g] || { n: 0, secs: 0, last: '' };
+    p.n++; p.last = esTime(new Date());
+    log(`playing ${g} from the dashboard`);
+  } else if (!on && playingNow) {
+    played[playingNow.g].secs += Math.round((Date.now() - playingNow.t) / 1000);
+    playingNow = null;
+  }
+});
+function flushPlayed() {
+  if (playingNow) { played[playingNow.g].secs += Math.round((Date.now() - playingNow.t) / 1000); playingNow = null; }
+  if (!Object.keys(played).length || cfg.game_list === 'off') return;
+  try {
+    fs.writeFileSync(PLAYED, JSON.stringify(played));
+    const { spawn } = require('child_process');
+    spawn('python3', [SYNC_GAMELIST, 'played', PLAYED], { env: Object.assign({}, process.env, { XCLOUD_HOME: HOME, XCLOUD_APP_LOG: LOG }), stdio: 'ignore', detached: true }).unref();
+    log(`games played from the dashboard, for EmulationStation's list: ${Object.keys(played).join(', ')}`);
+  } catch (e) { log(`couldn't note the games played: ${e.message}`); }
+}
+
+// ---------- instant replay (quick settings) ----------
+// The page keeps recording the game in 30-second parts (preload.js); saving
+// sends the last two, which ffmpeg joins and trims to the last 30 seconds,
+// in /userdata/recordings.
+const CLIPS_DIR = process.env.XCLOUD_CLIPS_DIR || '/userdata/recordings';
+ipcMain.on('xcloud-clip', (event, m) => {
+  const wc = event.sender;
+  const fail = why => { log(`clip not saved: ${why}`); try { wc.send('xcloud-toast', i18n.t(cfg.language, 'replayFail'), 3000); } catch (e) { /* ignore */ } };
+  try {
+    const parts = (m && Array.isArray(m.parts) ? m.parts : []).filter(b => b && b.byteLength);
+    if (!parts.length) { fail('nothing recorded yet'); return; }
+    fs.mkdirSync(CLIPS_DIR, { recursive: true });
+    const name = `xcloud-${esTime(new Date()).replace('T', '-')}.webm`, out = path.join(CLIPS_DIR, name);
+    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'xcloud-clip-'));
+    const files = parts.map((b, i) => { const f = path.join(tmp, `part${i}.webm`); fs.writeFileSync(f, Buffer.from(b)); return f; });
+    const done = ok => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+      if (ok) { log(`clip saved: ${out}`); try { wc.send('xcloud-toast', i18n.t(cfg.language, 'replayDone', { f: name }), 3000); } catch (e) { /* ignore */ } } };
+    if (files.length === 1) { fs.copyFileSync(files[0], out); done(true); return; }
+    // two parts: joined, then the last 30 seconds kept (no re-encoding)
+    fs.writeFileSync(path.join(tmp, 'list.txt'), files.map(f => `file '${f}'`).join('\n') + '\n');
+    const joined = path.join(tmp, 'joined.webm');
+    execFile('ffmpeg', ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', path.join(tmp, 'list.txt'), '-c', 'copy', joined], err => {
+      if (err) { fs.copyFileSync(files[files.length - 1], out); log(`clip: couldn't join the parts (${err.message}); saved the newest part`); done(true); return; }
+      execFile('ffmpeg', ['-v', 'error', '-y', '-sseof', '-30', '-i', joined, '-c', 'copy', out], err2 => {
+        if (err2) { fs.copyFileSync(joined, out); log(`clip: couldn't trim to 30 s (${err2.message}); saved it whole`); }
+        done(true);
+      });
+    });
+  } catch (e) { fail(e.message); }
+});
+
+// ---------- split screen: 2-4 players on one screen ----------
+// Settings > Controller > Split screen (off by default; the next time the
+// app opens). Each player gets a part of the screen with their own Xbox
+// page, sign-in (its own browser profile) and controller (the n-th one
+// connected), and their selection in their colour: the Xbox button colours.
+// Player 1 is the usual dashboard (with the app's screens); the window's
+// content becomes a plain box holding every player's page.
+const PLAYER_COLORS = ['#107c10', '#e81123', '#0078d7', '#ffb900'];   // A green, B red, X blue, Y yellow
+const players = [];   // [{ slot, view, wc, joined, profile }]
+const claims = {};    // slot -> the controller (gamepad index) that joined it
+// which controller a page gets: a player's own, or (player 1) the first one
+// the others haven't taken; none outside split screen
+function padsFor(wc) {
+  if (!cfg.split_players || !players.length) return {};
+  const p = players.find(x => x.wc === wc);
+  if (!p) return {};
+  if (p.slot === 1) return { padExclude: Object.values(claims) };
+  return claims[p.slot] != null ? { padIndex: claims[p.slot] } : { padIndex: -1 };
+}
+function playerSlot(wc) { const p = players.find(x => x.wc === wc); return p ? p.slot : 0; }
+// the parts of the screen: side by side for 2, four quarters for 3 or 4
+function splitRects(n, w, h) {
+  const hw = Math.floor(w / 2), hh = Math.floor(h / 2);
+  if (n === 2) return [{ x: 0, y: 0, width: hw, height: h }, { x: hw, y: 0, width: w - hw, height: h }];
+  return [{ x: 0, y: 0, width: hw, height: hh }, { x: hw, y: 0, width: w - hw, height: hh },
+    { x: 0, y: hh, width: hw, height: h - hh }, { x: hw, y: hh, width: w - hw, height: h - hh }].slice(0, n);
+}
+function playerCss(slot) {
+  const c = PLAYER_COLORS[slot - 1];
+  return `*:focus-visible,*:focus{outline:4px solid ${c} !important;outline-offset:2px !important;box-shadow:0 0 0 4px ${c} !important}` +
+    `html::after{content:'P${slot}';position:fixed;top:6px;left:8px;z-index:2147483646;font:700 16px sans-serif;color:#fff;background:${c};padding:2px 8px;border-radius:6px;pointer-events:none}`;
+}
+// an Xbox page in a player's box: their colour and their controller
+function playerPage(wc, slot) {
+  if (/^file:/.test(wc.getURL())) return;
+  const pads = padsFor(wc);
+  try { wc.insertCSS(playerCss(slot)).catch(() => { /* page between loads */ }); } catch (e) { /* page closing */ }
+  wc.executeJavaScript(`${PAD_GATE} window.__xcloudPadFix = ${cfg.controller_fix !== false};` +
+    ` window.__xcloudPadIndex = ${pads.padIndex == null ? 'undefined' : pads.padIndex}; window.__xcloudPadExclude = ${pads.padExclude ? JSON.stringify(pads.padExclude) : 'undefined'};`).catch(() => { /* page between loads */ });
+  try { wc.send('xcloud-pads', pads); } catch (e) { /* ignore */ }
+}
+function layoutPlayers() {
+  if (!mainWin || !players.length) return;
+  const b = mainWin.getContentBounds(), r = splitRects(players.length, b.width, b.height);
+  players.forEach((p, i) => { try { p.view.setBounds(r[i]); } catch (e) { /* ignore */ } });
+  fitOverlay();
+}
+// ----- "Press A to join": the boxes of players 2-4 until someone takes them -----
+function joinHtml(slot) {
+  const L = cfg.language, T = k => i18n.t(L, k);
+  const c = PLAYER_COLORS[slot - 1];
+  const txt = { player: T('joinPlayer').replace('{n}', slot), press: T('joinPress'), wait: T('joinWait'), pick: T('joinPick'), guest: T('joinGuest'),
+    inUse: T('joinInUse'), pin: T('joinPin'), pinBad: T('joinPinBad'), hint: T('joinHint') };
+  return `<!doctype html><html lang="${L}"><head><meta charset="utf-8"><title>Player ${slot}</title><style>
+  ${i18n.FONT_CSS}
+  html,body{margin:0;height:100%;background:#101010;color:#eee;font-family:${i18n.FONT_STACK}}
+  body{display:flex;align-items:center;justify-content:center;border:6px solid ${c};box-sizing:border-box}
+  .card{text-align:center;width:min(560px,86%)}
+  h1{margin:0 0 10px;font-size:44px;color:${c}}
+  .big{font-size:30px;margin:18px 0}
+  .muted{color:#9a9a9a;font-size:18px}
+  .list{margin:14px 0;text-align:left}
+  .it{padding:12px 16px;border-radius:10px;border:2px solid transparent;font-size:22px;margin:6px 0}
+  .it.on{border-color:${c};background:rgba(255,255,255,.08)}
+  .it.off{opacity:.45}
+  .pin{font:700 40px ui-monospace,monospace;letter-spacing:12px;margin:16px 0}
+  .pin span.on{color:${c};text-decoration:underline}
+  </style></head><body><div class="card" id="c"></div><script>
+  (function () {
+    var T = ${JSON.stringify(txt).replace(/</g, '\\u003c')}, P = '${ACTION_PREFIX}', slot = ${slot};
+    var st = 'wait', claimed = [], next = false, pad = -1, list = [], row = 0, pin = [0, 0, 0, 0], pi = 0, bad = false, prev = {};
+    var $ = function (id) { return document.getElementById(id); };
+    function esc(t) { return String(t).replace(/[&<>"]/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]; }); }
+    function render() {
+      var h = '<h1>' + esc(T.player) + '</h1>';
+      if (st === 'wait') h += '<div class="big">' + esc(next ? T.press : T.wait) + '</div>';
+      else if (st === 'pick') {
+        h += '<div class="big">' + esc(T.pick) + '</div><div class="list">' + list.map(function (p, i) {
+          return '<div class="it' + (i === row ? ' on' : '') + (p.inUse ? ' off' : '') + '">' + esc(p.name) + (p.inUse ? ' <span class="muted">(' + esc(T.inUse) + ')</span>' : '') + (p.locked ? ' \u{1F512}' : '') + '</div>';
+        }).join('') + '</div><div class="muted">' + esc(T.hint) + '</div>';
+      } else if (st === 'pin') {
+        h += '<div class="big">' + esc(bad ? T.pinBad : T.pin) + '</div><div class="pin">' + pin.map(function (d, i) { return '<span' + (i === pi ? ' class="on"' : '') + '>' + d + '</span>'; }).join('') + '</div>';
+      }
+      $('c').innerHTML = h;
+    }
+    window.__joinState = function (c, n) { claimed = c || []; next = !!n; if (st === 'wait') render(); };
+    window.__joinList = function (l) { list = l || []; row = 0; st = 'pick'; render(); };
+    window.__pinBad = function () { bad = true; pin = [0, 0, 0, 0]; pi = 0; st = 'pin'; render(); };
+    function connected() { var a = []; try { Array.prototype.forEach.call(navigator.getGamepads(), function (p) { if (p && p.connected !== false) a.push(p); }); } catch (e) {} return a; }
+    function press(p, b) { var x = p.buttons[b]; var on = !!(x && (x.pressed || x.value > 0.5)); var k = p.index + ':' + b, was = prev[k]; prev[k] = on; return on && !was; }
+    function dir(p) { var ax = p.axes || [], r = {}; r.up = press(p, 12) || (ax[1] < -0.6 && edge(p, 'u')); r.down = press(p, 13) || (ax[1] > 0.6 && edge(p, 'd')); r.left = press(p, 14) || (ax[0] < -0.6 && edge(p, 'l')); r.right = press(p, 15) || (ax[0] > 0.6 && edge(p, 'r'));
+      ['u', 'd', 'l', 'r'].forEach(function (k) { var v = { u: ax[1] < -0.6, d: ax[1] > 0.6, l: ax[0] < -0.6, r: ax[0] > 0.6 }[k]; if (!v) prev[p.index + k] = false; }); return r; }
+    function edge(p, k) { var key = p.index + k, was = prev[key]; prev[key] = true; return !was; }
+    setInterval(function () {
+      var pads = connected();
+      if (st === 'wait') {
+        // player 1 keeps the first controller nobody has taken
+        var p1 = null; for (var i = 0; i < pads.length && !p1; i++) if (claimed.indexOf(pads[i].index) < 0) p1 = pads[i];
+        for (var j = 0; j < pads.length; j++) {
+          var p = pads[j];
+          var a = press(p, 0);
+          if (a && next && p !== p1 && claimed.indexOf(p.index) < 0) { pad = p.index; location.href = P + 'join-pad?slot=' + slot + '&pad=' + pad; return; }
+        }
+        return;
+      }
+      var me = null; for (var k = 0; k < pads.length; k++) if (pads[k].index === pad) me = pads[k];
+      if (!me) return;
+      var d = dir(me), A = press(me, 0), B = press(me, 1);
+      if (st === 'pick') {
+        if (d.up) row = (row + list.length - 1) % list.length;
+        if (d.down) row = (row + 1) % list.length;
+        if (A && list[row] && !list[row].inUse) {
+          if (list[row].locked) { st = 'pin'; bad = false; pin = [0, 0, 0, 0]; pi = 0; }
+          else { location.href = P + 'join-pick?slot=' + slot + '&id=' + encodeURIComponent(list[row].id); return; }
+        }
+        if (B) { location.href = P + 'join-leave?slot=' + slot; return; }
+        render();
+      } else if (st === 'pin') {
+        if (d.up) pin[pi] = (pin[pi] + 1) % 10;
+        if (d.down) pin[pi] = (pin[pi] + 9) % 10;
+        if (d.left) pi = Math.max(0, pi - 1);
+        if (d.right) pi = Math.min(3, pi + 1);
+        if (A) { if (pi < 3) pi++; else { location.href = P + 'join-pick?slot=' + slot + '&id=' + encodeURIComponent(list[row].id) + '&pin=' + pin.join(''); return; } }
+        if (B) { st = 'pick'; }
+        render();
+      }
+    }, 50);
+    render();
+  })();
+  </script></body></html>`;
+}
+// the box waiting next for someone to press A: the lowest one nobody has
+function joinRefresh() {
+  const waiting = players.filter(p => p.slot > 1 && !p.joined && claims[p.slot] == null).map(p => p.slot);
+  const next = waiting.length ? Math.min.apply(null, waiting) : 0;
+  for (const p of players) {
+    if (p.slot === 1) { playerPage(p.wc, 1); continue; }
+    if (!p.joined) { try { p.wc.executeJavaScript(`window.__joinState && window.__joinState(${JSON.stringify(Object.values(claims))}, ${p.slot === next})`).catch(() => {}); } catch (e) { /* ignore */ } }
+  }
+}
+function joinList(slot) {
+  const used = players.filter(p => p.joined && p.profile).map(p => p.profile).concat(curProfile ? [curProfile.id] : []);
+  const items = profiles.list.map(p => ({ id: p.id, name: profileName(p), inUse: used.includes(p.id), locked: needsPin(p) }));
+  items.push({ id: 'guest', name: i18n.t(cfg.language, 'joinGuest') });
+  return items;
+}
+function joinAction(wc, action, q) {
+  const slot = Number(q.get('slot')), pl = players.find(p => p.slot === slot);
+  if (!pl) return;
+  if (action === 'join-pad') {
+    const pad = Number(q.get('pad'));
+    if (!Number.isInteger(pad) || Object.values(claims).includes(pad)) return;
+    claims[slot] = pad;
+    log(`split screen: player ${slot} joined (controller ${pad})`);
+    pl.wc.executeJavaScript(`window.__joinList(${JSON.stringify(joinList(slot)).replace(/</g, '\\u003c')})`).catch(() => {});
+    joinRefresh();
+  } else if (action === 'join-leave') {
+    delete claims[slot];
+    log(`split screen: player ${slot} left before picking`);
+    showAppPage(pl.wc, `xcloud-join-${slot}.html`, joinHtml(slot));
+    pl.wc.once('did-finish-load', () => joinRefresh());
+    joinRefresh();
+  } else if (action === 'join-pick') {
+    const id = String(q.get('id') || '');
+    const prof = id === 'guest' ? null : profiles.byId(id);
+    if (id !== 'guest' && !prof) return;
+    if (prof && needsPin(prof) && !profiles.checkPin(String(q.get('pin') || ''))) {
+      log(`split screen: player ${slot}: wrong PIN for an adult profile`);
+      pl.wc.executeJavaScript('window.__pinBad && window.__pinBad()').catch(() => {});
+      return;
+    }
+    // the guest seat: forgotten when the app closes, unless Remember split-screen players is on
+    const part = prof ? profiles.partition(prof) : (cfg.split_remember ? `persist:xcloud-player${slot}` : `xcloud-guest${slot}`);
+    playerBox(pl, part, prof ? prof.id : '');
+    log(`split screen: player ${slot} plays as ${prof ? profileName(prof) : `a guest${cfg.split_remember ? ' (remembered)' : ''}`}`);
+  }
+}
+// a player's box becomes their own Xbox page (a new view: the browser profile
+// is chosen when it's made)
+function playerBox(pl, part, profileId) {
+  const root = mainWin.contentView, old = pl.view;
+  setupSession(part ? session.fromPartition(part) : session.defaultSession);
+  const view = new WebContentsView({ webPreferences: Object.assign({ preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }, part ? { partition: part } : {}) });
+  const wc = view.webContents, slot = pl.slot;
+  Object.assign(pl, { view, wc, joined: true, profile: profileId });
+  guard(wc);
+  wc.on('dom-ready', () => { playerPage(wc, slot); if (onXboxPlay(wc.getURL())) wc.executeJavaScript(streamScript()).catch(() => { /* page between loads */ }); });
+  wc.on('console-message', function (e) {
+    const m = String(e && typeof e.message === 'string' ? e.message : arguments[2] || '');
+    if (m.startsWith('[xcloud] ')) log(`player ${slot}: ${m.slice(9, 3009)}`);
+  });
+  try { root.addChildView(view); if (overlay) { root.removeChildView(overlay); root.addChildView(overlay); } } catch (e) { /* ignore */ }
+  try { root.removeChildView(old); old.webContents.close(); } catch (e) { /* ignore */ }
+  layoutPlayers();
+  const prof = profileId ? profiles.byId(profileId) : null;
+  const start = prof ? (profiles.settings(prof.id).start_url || cfg.start_url) : cfg.start_url;
+  wc.loadURL(start).catch(e => log(`player ${slot}: couldn't open Xbox (${e.message})`));
+}
+function startSplit(n) {
+  const View = electron.View;
+  if (!View || typeof mainWin.setContentView !== 'function' || !mainWin.contentView) throw new Error('this engine has no views to split the screen with');
+  const p1 = mainWin.contentView, root = new View();
+  try { root.setBackgroundColor && root.setBackgroundColor('#000000'); } catch (e) { /* ignore */ }
+  mainWin.setContentView(root);
+  root.addChildView(p1);
+  players.push({ slot: 1, view: p1, wc: mainWin.webContents, joined: true, profile: curProfile ? curProfile.id : '' });
+  for (let slot = 2; slot <= n; slot++) {
+    const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'xcloud-join', backgroundThrottling: false } });
+    const pl = { slot, view, wc: view.webContents, joined: false, profile: '' };
+    players.push(pl);
+    guard(pl.wc);
+    root.addChildView(view);
+    showAppPage(pl.wc, `xcloud-join-${slot}.html`, joinHtml(slot));
+    pl.wc.on('did-finish-load', () => { if (!pl.joined) joinRefresh(); });
+  }
+  mainWin.webContents.on('dom-ready', () => playerPage(mainWin.webContents, 1));
+  mainWin.on('resize', layoutPlayers);
+  layoutPlayers();
+  log(`split screen: ${n} players; player 1 has the first controller, the others press A to join`);
+}
+
 function makeMainWin() {
   const part = profiles.partition(curProfile);
   const win = new BrowserWindow({
@@ -3575,6 +4101,7 @@ function makeMainWin() {
   // controller, and the gate the welcome popup uses) as soon as it starts
   // a restricted profile: games started from the dashboard are checked too
   win.webContents.on('did-navigate-in-page', (e, url) => pickHint(win.webContents, url));
+  win.webContents.on('did-navigate-in-page', () => { if (cfg.picture_per_game) applyStreamOptions(win.webContents); });
   win.webContents.on('did-navigate', (e, url) => pickHint(win.webContents, url));
   win.webContents.on('did-navigate', (e, url) => checkAdsLaunch(win.webContents, url));
   win.webContents.on('did-navigate-in-page', (e, url) => checkAdsLaunch(win.webContents, url));
@@ -3635,6 +4162,9 @@ function createWindow() {
     else openSettings(mainWin.webContents, 'exit');
     return;
   }
+  if (cfg.split_players >= 2 && !GAME_ID) {
+    try { startSplit(cfg.split_players); } catch (e) { players.length = 0; log(`split screen not started: ${e.message}; one player`); }
+  }
   // Xbox starts loading straight away, behind the intro video. A game from
   // Batocera's list with more than one profile: only the dashboard until
   // someone picks who's playing, so the game never starts in the wrong account
@@ -3661,7 +4191,7 @@ function createWindow() {
 function preloadText() {
   const L = cfg.language;
   const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone', 'rowHint',
-    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'qpShot', 'qpShotGo', 'qpTip', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
+    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'qpShot', 'qpShotGo', 'qpTip', 'upT', 'utT', 'utScreen', 'usT', 'cleanT', 'qpGame', 'statsT', 'qpReplay', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
   const text = Object.fromEntries(keys.map(k => [k, i18n.t(L, k)]));
   // the Japanese / Korean letters, for the keyboard and messages on the Xbox page
   return { lang: L, text, fontCss: L === 'ja' || L === 'ko' ? i18n.FONT_CSS : '', fontStack: i18n.FONT_STACK };
@@ -3669,8 +4199,8 @@ function preloadText() {
 // the volume the Xbox page plays at: 0 when muted in Settings
 function appVolume() { return cfg.muted ? 0 : cfg.volume; }
 ipcMain.on('xcloud-config', event => {
-  event.returnValue = { touch: cfg.touch_controller, exitHoldMs: Math.round(cfg.exit_hold_seconds * 1000), keyHighlight: cfg.keyboard_highlight, padFix: cfg.controller_fix !== false, volume: appVolume(), i18n: preloadText(),
-    stream: (() => { try { return onXboxPlay(event.sender.getURL()) ? streamScript() : ''; } catch (e) { return ''; } })() };
+  event.returnValue = Object.assign(padsFor(event.sender), { replay: cfg.replay, touch: cfg.touch_controller, exitHoldMs: Math.round(cfg.exit_hold_seconds * 1000), keyHighlight: cfg.keyboard_highlight, padFix: cfg.controller_fix !== false, volume: appVolume(), i18n: preloadText(),
+    stream: (() => { try { return onXboxPlay(event.sender.getURL()) ? streamScript() : ''; } catch (e) { return ''; } })() });
 });
 // the controller's Menu button on the welcome screen
 ipcMain.on('xcloud-settings', event => openSettings(event.sender, 'welcome'));

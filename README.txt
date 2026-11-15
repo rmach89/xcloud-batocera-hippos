@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.6 (November 2026)
+Version 1.2.7 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -101,7 +101,11 @@ opens Settings directly.
 Quick settings in a game: hold LB + RB + View (L1 + R1 + Share/Select)
 for 1 second while playing, or press F9 on a keyboard. A panel opens on
 the right with the sound (Volume, Game volume boost) and the picture
-(Sharpening, Clarity boost, Colour saturation, Contrast, Brightness).
+(Sharpening, Clarity boost, Colour saturation, Contrast, Brightness,
+Video clean-up, and on 64-bit PCs 4K upscaling with its size and
+sharpness), and Stream stats on or off; with Instant replay on, "Save
+the last 30 seconds" too. With Picture settings per game on, the picture settings
+changed here are kept for that game only.
 Up / down choose, left / right change, A puts one back to its default,
 B (or the same buttons, F9, Esc) closes. Changes show at once and are
 saved when it closes. The game doesn't get the controller while it's up.
@@ -186,6 +190,9 @@ The rows are grouped in sections:
                              a game that offers it, otherwise Xbox sends
                              1080p). Wired is best. There's no 4K. Starts
                              with the next game
+  Connection check           A: tests the download speed and the ping to
+                             Xbox, and says which resolution suits them;
+                             A again sets it
   Stream as a Windows PC     tells Xbox this is a Windows PC; may give a
                              sharper picture on some machines (reloads
                              the dashboard)
@@ -202,9 +209,25 @@ The rows are grouped in sections:
                              never allowed). It presses the stream's own
                              microphone switch; the log says what it
                              found. Starts with the next game
+  Keep stream quality steady asks Xbox to keep the bitrate up for the
+                             chosen resolution (about 12 / 22 / 32 / 42
+                             Mb/s) instead of letting it drift down.
+                             Xbox's server still decides; the stats show
+                             what it sends. Starts with the next game
+  Reconnect automatically    (on by default) if the stream drops, presses
+                             Xbox's own reconnect / try again button, up
+                             to 3 times in 5 minutes
+  Stay connected             answers Xbox's "Are you still there?"
+                             during a game, so the stream doesn't end
+  Instant replay             keeps the last 30 seconds of a game; quick
+                             settings' "Save the last 30 seconds" saves
+                             them as a video in /userdata/recordings.
+                             Uses more of the processor
   Stream stats               a small box at the top while you play:
                              resolution, frame rate, ping, bitrate,
-                             packet loss and decode time
+                             packet loss and decode time, with graphs
+                             of the last 60 seconds (frame rate, ping,
+                             bitrate)
 
   PICTURE
   Sharpening                 off / low / medium / high. Sharpens the
@@ -217,10 +240,20 @@ The rows are grouped in sections:
                              at most 1440p, so this makes it sharper,
                              not real 4K. Uses more of the GPU: turn it
                              off if games stutter
+  Upscaling size             (with 4K upscaling on) screen size, 1080p,
+                             1440p or 4K; never bigger than the screen,
+                             never smaller than the stream
+  Upscaling sharpness        (with 4K upscaling on) 0-100%; A: 60%
+  Video clean-up             softens the blocks video compression leaves
+                             in flat areas, keeping edges sharp (on the
+                             graphics chip; any machine)
   Clarity boost              a little more contrast and colour, in one
                              switch (works together with the sliders)
   Contrast, Colour           fine-tune the game's picture, 50-150%.
   saturation, Brightness     A / Enter puts a slider back to 100%
+  Picture settings per game  quick settings in a game saves the picture
+                             settings for that game only; other games
+                             keep the ones here
 
   CONTROLLER
   Controls                   every button and key the app uses
@@ -231,6 +264,28 @@ The rows are grouped in sections:
                              D-pad, A B X Y, bumpers, triggers, View,
                              Menu, L3 and R3. Xbox sees it as one more
                              Xbox controller from the first touch
+  Controller battery         the charge of wireless Xbox and PlayStation
+                             controllers (when Linux reports it), and a
+                             Steam Deck's own battery
+  Split screen               off / 2 / 3 / 4 players on one screen (off
+                             by default; only turned on here). Player 1
+                             uses the first controller. Each other box
+                             says "Press A to join": a spare controller
+                             presses A to take the next box, then picks
+                             who's playing there: one of the profiles
+                             (adults' need the PIN when a child's
+                             profile exists) or a guest who signs in in
+                             that box. Each player's selection is in
+                             their colour: green (A), red (B), blue (X),
+                             yellow (Y). Each needs Game Pass, and 2-4
+                             streams need a fast connection and
+                             machine; the sound of all of them plays
+                             together. Applies the next time the app
+                             opens (for everyone on this machine)
+  Remember split-screen      (with split screen on) keeps the guests'
+  players                    Xbox sign-ins for next time. Off (the
+                             default): they're forgotten when the app
+                             closes
 
   XBOX DASHBOARD
   Disable social features    friends, messages and suggested people
@@ -477,6 +532,28 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.7
+-------------------
+- Split screen: 2 to 4 players on one screen, each with their own Xbox
+  sign-in, controller and selection colour (Settings > Controller; off
+  by default).
+- 4K upscaling: choose its size (screen, 1080p, 1440p, 4K) and
+  sharpness, in Settings and in quick settings during a game.
+- Video clean-up and Keep stream quality steady (like XFly).
+- Picture settings per game.
+- Stream stats: graphs of the last 60 seconds; on or off in quick
+  settings too.
+- Split screen: "Press A to join" for players 2-4, each picking a
+  profile or playing as a guest; guests are forgotten when the app
+  closes unless Remember split-screen players is on.
+- Instant replay (save the last 30 seconds from quick settings), Stay
+  connected, Reconnect automatically, a Connection check and the
+  Controller battery in Settings.
+- Games started from the dashboard count in EmulationStation's list
+  (play count, last played, play time), like the ones it starts itself.
+- 3D game boxes: smaller keyboard/mouse and touch badges and age-rating
+  tile (the boxes are redrawn at the next list update).
 
 What's new in 1.2.6
 -------------------

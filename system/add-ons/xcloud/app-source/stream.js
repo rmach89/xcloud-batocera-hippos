@@ -16,10 +16,16 @@
 //   splash  true / false                    skip Xbox's splash video as a game starts
 //   fb      true / false                    close the "how was it?" questions after a game
 //   anim    true / false                    fewer animations on the dashboard
+//   upTarget 'screen' | '1080' | '1440' | '2160'  the upscaler's size (never more than the screen, never less than the stream)
+//   upSharp 0 .. 100                        the upscaler's sharpening
+//   clean   true / false                    video clean-up: softens compression blocks in flat areas (WebGL)
+//   steady  true / false                    ask Xbox to keep the bitrate up (SDP bandwidth)
+//   alive   true / false                    answer Xbox's "are you still there?"
+//   reconnect true / false                  a dropped stream: press Xbox's own reconnect button
 (function () {
   if (window.__xcloudStream) return;
   window.__xcloudStream = 1;
-  var C = Object.assign({ res: 'auto', sharpen: 0, clarity: false, contrast: 100, saturation: 100, brightness: 100, stats: false, vib: 100, boost: 100, vol: 100, ipv6: false, wait: true, mic: false, up: false, splash: false, fb: false, anim: false, waitT: {} }, window.__xcloudStreamCfg || {});
+  var C = Object.assign({ res: 'auto', sharpen: 0, clarity: false, contrast: 100, saturation: 100, brightness: 100, stats: false, vib: 100, boost: 100, vol: 100, ipv6: false, wait: true, mic: false, up: false, splash: false, fb: false, anim: false, upTarget: 'screen', upSharp: 60, clean: false, steady: false, alive: false, reconnect: true, waitT: {} }, window.__xcloudStreamCfg || {});
   function say(m) { try { console.info('[xcloud] ' + m); } catch (e) { /* ignore */ } }
 
   // ---------- resolution: the play request says which kind of device this is ----------
@@ -69,6 +75,37 @@
       return new Response(JSON.stringify(obj), { status: res.status, statusText: res.statusText, headers: res.headers });
     } catch (e) { return res; }
   }
+  // ---------- steady stream quality: ask for the bitrate and keep asking ----------
+  // The offer sent to Xbox says how much the video may use (b=AS, and the
+  // H.264 bitrate hints), sized for the resolution chosen. Xbox's server
+  // still decides; the stats and the log show what it sends.
+  var KBPS = { auto: 12000, '1080p': 22000, '1080p-hq': 32000, '1440p': 42000 };
+  function steadySdp(sdp) {
+    var kb = KBPS[C.res] || 12000, lines = sdp.split(/\r?\n/), out = [], inVideo = false, h264 = {};
+    lines.forEach(function (l) { var m = /^a=rtpmap:(\d+) H264\//i.exec(l); if (m) h264[m[1]] = 1; });
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      if (/^m=/.test(l)) inVideo = /^m=video/.test(l);
+      if (inVideo && /^b=(AS|TIAS):/.test(l)) continue;
+      var f = /^a=fmtp:(\d+) (.*)$/.exec(l);
+      if (inVideo && f && h264[f[1]] && !/x-google-min-bitrate/.test(l)) l += ';x-google-min-bitrate=' + Math.round(kb * 0.6) + ';x-google-start-bitrate=' + Math.round(kb * 0.8) + ';x-google-max-bitrate=' + kb;
+      out.push(l);
+      if (inVideo && /^c=/.test(l)) out.push('b=AS:' + kb);
+    }
+    return { sdp: out.join('\r\n'), kb: kb };
+  }
+  async function sdpRequest(input, init) {
+    try {
+      var req = new Request(input, init);
+      var body = JSON.parse(await req.clone().text() || '{}');
+      if (!body || typeof body.sdp !== 'string' || !/m=video/.test(body.sdp)) return nativeFetch.call(window, input, init);
+      var r = steadySdp(body.sdp);
+      body.sdp = r.sdp;
+      say('steady quality: asking for ' + Math.round(r.kb / 1000) + ' Mb/s video (' + C.res + ')');
+      return nativeFetch.call(window, new Request(req, { body: JSON.stringify(body) }));
+    } catch (e) { say('steady quality: offer left as it is (' + e.message + ')'); return nativeFetch.call(window, input, init); }
+  }
+
   // ---------- prefer IPv6: the server's IPv6 address first ----------
   // The ICE answer lists the addresses the game server can be reached on; the
   // browser tries them by priority. IPv6 ones are put first (when there are any).
@@ -292,6 +329,7 @@
       }
     }
     if (/\/v5\/sessions\/cloud\/[^/]+\/ice(\?|$)/.test(url) && method === 'GET') return iceRequest(input, init);
+    if (C.steady && /\/v5\/sessions\/cloud\/[^/]+\/sdp(\?|$)/.test(url) && method === 'POST') return sdpRequest(input, init);
     if (/\/v5\/sessions\/cloud\/play(\?|$)/.test(url) && method === 'POST') return playRequest(input, init);
     if (/\/v5\/sessions\/cloud\/[^/]+\/configuration(\?|$)/.test(url) && method === 'GET') return configRequest(input, init);
     return nativeFetch.apply(this, arguments);
@@ -419,7 +457,7 @@
   // the browser's plain stretch. Sharper on a 4K screen; uses more of the GPU.
   var UP_VS = 'attribute vec2 p; varying vec2 uv; void main(){ uv = vec2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5); gl_Position = vec4(p, 0.0, 1.0); }';
   var UP_FS = [
-    'precision mediump float; uniform sampler2D t; uniform vec2 px; uniform float sharp; varying vec2 uv;',
+    'precision mediump float; uniform sampler2D t; uniform vec2 px; uniform float sharp; uniform float clean; varying vec2 uv;',
     'void main(){',
     ' vec3 a = texture2D(t, uv + vec2(-px.x, -px.y)).rgb, b = texture2D(t, uv + vec2(0.0, -px.y)).rgb, c = texture2D(t, uv + vec2(px.x, -px.y)).rgb;',
     ' vec3 d = texture2D(t, uv + vec2(-px.x, 0.0)).rgb, e = texture2D(t, uv).rgb, f = texture2D(t, uv + vec2(px.x, 0.0)).rgb;',
@@ -427,8 +465,17 @@
     ' vec3 mn = min(min(min(d, e), min(f, b)), h); mn += min(mn, min(min(a, c), min(g, i)));',
     ' vec3 mx = max(max(max(d, e), max(f, b)), h); mx += max(mx, max(max(a, c), max(g, i)));',
     ' vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(0.0001)), 0.0, 1.0));',
-    ' vec3 w = amp * (-1.0 / mix(8.0, 5.0, sharp));',
-    ' gl_FragColor = vec4(clamp((b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w), 0.0, 1.0), 1.0);',
+    // clean-up: the centre pulled toward neighbours that differ only a little
+    // (compression blocks in flat areas), real edges left alone
+    ' if (clean > 0.5) {',
+    '  vec3 acc = e; float wt = 1.0;',
+    '  vec3 n[8]; n[0] = a; n[1] = b; n[2] = c; n[3] = d; n[4] = f; n[5] = g; n[6] = h; n[7] = i;',
+    '  for (int k = 0; k < 8; k++) { vec3 dd = n[k] - e; float q = exp(-dot(dd, dd) * 600.0); acc += n[k] * q; wt += q; }',
+    '  e = acc / wt;',
+    ' }',
+    ' vec3 w = amp * (-1.0 / mix(8.0, 5.0, clamp(sharp, 0.0, 1.0)));',
+    ' vec3 cas = clamp((b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w), 0.0, 1.0);',
+    ' gl_FragColor = vec4(mix(e, cas, clamp(sharp * 1.5, 0.0, 1.0)), 1.0);',
     '}'].join('\n');
   var UP = { cv: null, gl: null, prog: null, tex: null, vid: null, failed: false, logged: '' };
   function upSetup() {
@@ -447,7 +494,6 @@
     var loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
     [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(function (q) { gl.texParameteri(gl.TEXTURE_2D, q[0], q[1]); });
-    gl.uniform1f(gl.getUniformLocation(prog, 'sharp'), 0.6);
     UP.cv = cv; UP.gl = gl; UP.prog = prog; UP.tex = tex;
   }
   // where the video's picture is on screen (it keeps its shape: object-fit contain)
@@ -459,20 +505,28 @@
   }
   function upDraw() {
     var v = UP.vid;
-    if (!v || !C.up || !UP.gl) return;
+    if (!v || !(C.up || C.clean) || !UP.gl) return;
     try {
       var rc = picRect(v), gl = UP.gl, cv = UP.cv;
       if (!rc) return;
-      var dpr = window.devicePixelRatio || 1, W = Math.round(rc.w * dpr), H = Math.round(rc.h * dpr);
+      var dpr = window.devicePixelRatio || 1, sw = Math.round(rc.w * dpr), sh2 = Math.round(rc.h * dpr);
+      var W = sw, H = sh2;
+      if (!C.up) { W = v.videoWidth; H = v.videoHeight; }            // clean-up only: at the stream's own size
+      else if (C.upTarget && C.upTarget !== 'screen') {
+        var t = Math.max(v.videoHeight, Math.min(sh2, Number(C.upTarget) || sh2));
+        H = t; W = Math.round(t * v.videoWidth / v.videoHeight);
+      }
       if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
       cv.style.left = rc.x + 'px'; cv.style.top = rc.y + 'px'; cv.style.width = rc.w + 'px'; cv.style.height = rc.h + 'px';
       gl.viewport(0, 0, W, H);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, v);
       gl.uniform2f(gl.getUniformLocation(UP.prog, 'px'), 1 / v.videoWidth, 1 / v.videoHeight);
+      gl.uniform1f(gl.getUniformLocation(UP.prog, 'sharp'), C.up ? Math.max(0, Math.min(100, Number(C.upSharp))) / 100 : 0);
+      gl.uniform1f(gl.getUniformLocation(UP.prog, 'clean'), C.clean ? 1 : 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       if (cv.style.display === 'none') { cv.style.display = 'block'; v.style.opacity = '0'; }
-      var note = v.videoWidth + 'x' + v.videoHeight + ' -> ' + W + 'x' + H;
-      if (note !== UP.logged) { UP.logged = note; say('4K upscaler: ' + note); }
+      var note = v.videoWidth + 'x' + v.videoHeight + ' -> ' + W + 'x' + H + (C.up ? ', sharpness ' + C.upSharp + '%' : '') + (C.clean ? ', clean-up' : '');
+      if (note !== UP.logged) { UP.logged = note; say((C.up ? '4K upscaler: ' : 'video clean-up: ') + note); }
     } catch (e) { say('4K upscaler stopped: ' + e.message); upOff(); UP.failed = true; }
   }
   function upLoop(v) {
@@ -488,7 +542,7 @@
   }
   setInterval(function () {
     var v = document.querySelector('#game-stream video');
-    if (!C.up || !v || UP.failed) { if (UP.vid) upOff(); return; }
+    if (!(C.up || C.clean) || !v || UP.failed) { if (UP.vid) upOff(); return; }
     if (UP.vid === v) return;
     try { if (!UP.gl) upSetup(); } catch (e) { UP.failed = true; say('4K upscaler not available: ' + e.message); return; }
     upOff(); UP.vid = v;
@@ -545,6 +599,37 @@
     }
   }, 500);
 
+  // ---------- stay connected, and reconnect ----------
+  // Xbox's own boxes, found by their words (in the site's language) and
+  // answered with their own buttons: "Are you still there?" (Stay
+  // connected) and "connection lost / try again" (Reconnect automatically,
+  // up to 3 times in 5 minutes).
+  var IDLE = /still there|are you there|inactiv|idle|noch da|toujours là|sigues ahí|ainda está|ancora lì|nog daar|stadig der|vielä siellä|fortfarande där|nadal tam|ještě tam|ešte tam|még ott|まだ|아직/i;
+  var STAY = /continue|keep playing|i'm here|i am here|still here|yes|weiter|continuer|continuar|continua|doorgaan|fortsæt|jatka|fortsett|fortsätt|kontynuuj|pokračovat|pokračovať|folytat|続ける|계속/i;
+  var LOST = /connection|disconnect|lost|reconnect|verbindung|connexion|conexión|conexão|connessione|verbinding|forbindelse|yhteys|anslutning|połącz|připojení|pripojenie|kapcsolat|接続|연결/i;
+  var RETRY = /reconnect|try again|retry|erneut|wiederholen|réessayer|reconnecter|reintentar|reconectar|tentar novamente|riprova|riconnetti|opnieuw|prøv igen|yritä uudelleen|prøv igjen|försök igen|spróbuj ponownie|zkusit znovu|skúsiť znova|újra|再試行|再接続|다시 시도|재연결/i;
+  var retries = [], lastGame = '';
+  function boxText(b) { return (b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''); }
+  function buttonIn(box, re) {
+    return Array.prototype.filter.call(box.querySelectorAll('button,[role=button],a'), function (x) { return re.test((x.getAttribute('aria-label') || '') + ' ' + (x.textContent || '')); })[0] || null;
+  }
+  setInterval(function () {
+    if (/\/launch\//.test(location.pathname) && document.querySelector('#game-stream video')) lastGame = location.pathname;
+    var boxes = document.querySelectorAll('[role=dialog],[aria-modal=true],[role=alertdialog]');
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i], text = boxText(box);
+      if (C.alive && IDLE.test(text)) {
+        var b = buttonIn(box, STAY);
+        if (b) { b.click(); say('stay connected: answered "' + text.trim().slice(0, 40) + '"'); return; }
+      }
+      if (C.reconnect && lastGame && LOST.test(text)) {
+        var now = Date.now(); retries = retries.filter(function (t) { return now - t < 300000; });
+        var r = buttonIn(box, RETRY);
+        if (r && retries.length < 3) { retries.push(now); r.click(); say('reconnect: pressed "' + ((r.getAttribute('aria-label') || r.textContent || '').trim().slice(0, 30)) + '" (' + retries.length + ' of 3)'); return; }
+      }
+    }
+  }, 1000);
+
   // ---------- fewer animations ----------
   var animCss = null;
   function anim() {
@@ -568,7 +653,25 @@
     if (window.webkitRTCPeerConnection) window.webkitRTCPeerConnection = PC;
   }
   var box = null, timer = null, last = null;
-  function hideStats() { if (box) box.style.display = 'none'; last = null; }
+  function hideStats() { if (box) box.style.display = 'none'; last = null; HIST.fps = []; HIST.ping = []; HIST.mbps = []; }
+  // the last 60 seconds of frame rate, ping and bitrate, as small graphs under the line
+  var HIST = { fps: [], ping: [], mbps: [] }, graph = null, lineEl = null;
+  function pushHist(k, v) { if (v == null || !isFinite(v)) return; HIST[k].push(v); if (HIST[k].length > 60) HIST[k].shift(); }
+  function drawGraphs() {
+    if (!graph) return;
+    var g = graph.getContext('2d'), W = 180, H = 46, items = [['fps', HIST.fps, '#7fd16f', ''], ['ping', HIST.ping, '#ffd866', ' ms'], ['Mb/s', HIST.mbps, '#6cb6ff', '']];
+    g.clearRect(0, 0, graph.width, graph.height);
+    items.forEach(function (it, n) {
+      var x0 = n * (W + 12), data = it[1], max = Math.max.apply(null, data.concat([1])) * 1.15;
+      g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x0, 0, W, H);
+      g.strokeStyle = it[2]; g.lineWidth = 2; g.beginPath();
+      data.forEach(function (v, i) { var x = x0 + (W - 2) * (i + 60 - data.length) / 59 + 1, y = H - 2 - (H - 14) * v / max; if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+      g.stroke();
+      g.fillStyle = '#fff'; g.font = '600 11px ui-monospace,Consolas,monospace';
+      var cur = data.length ? data[data.length - 1] : null;
+      g.fillText(it[0] + (cur == null ? '' : ' ' + (it[0] === 'Mb/s' ? cur.toFixed(1) : Math.round(cur)) + it[3]) + '  max ' + (data.length ? (it[0] === 'Mb/s' ? Math.max.apply(null, data).toFixed(1) : Math.round(Math.max.apply(null, data))) : '-'), x0 + 4, 11);
+    });
+  }
   function showStats(text) {
     if (!box) {
       box = document.createElement('div');
@@ -576,10 +679,15 @@
       box.setAttribute('style', 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:2147483000;pointer-events:none;' +
         'font:600 14px/1.3 ui-monospace,Consolas,monospace;color:#fff;background:rgba(0,0,0,.6);padding:5px 12px;border-radius:8px;' +
         'white-space:nowrap;text-shadow:0 1px 2px #000;letter-spacing:.2px');
+      lineEl = document.createElement('div');
+      graph = document.createElement('canvas'); graph.width = 3 * 180 + 2 * 12; graph.height = 46;
+      graph.setAttribute('style', 'display:block;margin:5px auto 2px');
+      box.appendChild(lineEl); box.appendChild(graph);
       document.documentElement.appendChild(box);
     }
-    box.textContent = text;
+    lineEl.textContent = text;
     box.style.display = 'block';
+    drawGraphs();
   }
   function n1(v) { return (Math.round(v * 10) / 10).toFixed(1); }
   async function poll() {
@@ -598,11 +706,11 @@
     if (!video) { hideStats(); return; }
     var parts = [];
     if (video.frameWidth) parts.push(video.frameWidth + '×' + video.frameHeight);
-    if (video.framesPerSecond != null) parts.push(Math.round(video.framesPerSecond) + ' fps');
-    if (pair && pair.currentRoundTripTime != null) parts.push('ping ' + Math.round(pair.currentRoundTripTime * 1000) + ' ms');
+    if (video.framesPerSecond != null) { parts.push(Math.round(video.framesPerSecond) + ' fps'); pushHist('fps', video.framesPerSecond); }
+    if (pair && pair.currentRoundTripTime != null) { parts.push('ping ' + Math.round(pair.currentRoundTripTime * 1000) + ' ms'); pushHist('ping', pair.currentRoundTripTime * 1000); }
     if (last && video.timestamp > last.timestamp) {
       var mbps = (video.bytesReceived - last.bytesReceived) * 8 / ((video.timestamp - last.timestamp) / 1000) / 1e6;
-      parts.push(n1(Math.max(0, mbps)) + ' Mb/s');
+      parts.push(n1(Math.max(0, mbps)) + ' Mb/s'); pushHist('mbps', Math.max(0, mbps));
       var frames = video.framesDecoded - last.framesDecoded;
       if (frames > 0 && video.totalDecodeTime != null) parts.push('decode ' + n1((video.totalDecodeTime - last.totalDecodeTime) * 1000 / frames) + ' ms');
     }
@@ -620,7 +728,7 @@
     Object.assign(C, c || {});
     try { sharpen(); } catch (e) { /* no page yet */ }
     try { anim(); } catch (e) { /* no page yet */ }
-    if (!C.up && UP.vid) upOff();
+    if (!C.up && !C.clean && UP.vid) upOff();
     stats();
     try { if (gain) gain.gain.value = gainValue(); boostAudio(); } catch (e) { /* ignore */ }
     if (!C.wait) { waitFor = ''; hidePill(); }

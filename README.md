@@ -23,7 +23,8 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 - **Region unlock without a VPN** (Australia, Brazil, Europe, Japan, Korea, United States) for where Xbox Cloud Gaming isn't offered, and **Disable social features** for a faster dashboard.
 - An **on-screen touch controller**: see-through buttons over the game for touch screens.
 - **4K upscaling** on 64-bit PCs: the stream drawn at the screen's full resolution and sharpened on the graphics chip (Xbox sends at most 1440p; this uses more of the GPU).
-- **Quick settings in a game** (hold LB + RB + View, or F9): sound and picture over the game, and **screenshots** with the picture settings in them, saved to `/userdata/screenshots`.
+- **Quick settings in a game** (hold LB + RB + View, or F9): sound and picture over the game, stream stats, **screenshots** with the picture settings in them (saved to `/userdata/screenshots`), and **instant replay**: the last 30 seconds as a video in `/userdata/recordings`.
+- Games started from the dashboard count in EmulationStation's **play count, last played and play time**.
 - **Skip the Xbox splash video**, **turn off post-game feedback**, **reduce animations** and **turn off analytics** for slower devices.
 
 **EmulationStation game list** (optional)
@@ -32,6 +33,8 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 - **3D game boxes**: a black case with the cover, the name on the spine, an age-rating tile, and badges for games that support **keyboard and mouse** or **touch**.
 - The list updates itself every few days. A progress bar in the bottom-left corner shows how far an update has got, and an update carries on in the background if you close the app.
 - Xbox Cloud Gaming itself always stays at the top of the list.
+
+**Split screen** (optional, off by default): 2 to 4 players on one screen. Player 1 uses the first controller; the others press A to join the next box and pick a profile or play as a guest. Each player's selection is in their own colour: green, red, blue, yellow (the A, B, X and Y colours). Guests are forgotten when the app closes unless "Remember split-screen players" is on.
 
 **Launch Single Game** (optional): picking Xbox Cloud Gaming in the carousel opens the app straight away, and closing it takes you back to the carousel.
 
@@ -103,9 +106,9 @@ In Settings: up and down to move, left and right to change, A to select, Menu to
 |---|---|
 | Profile and account | Change user, sign out of Xbox, sign out when closing |
 | General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound |
-| Stream | Resolution, stream as a Windows PC, GPU acceleration, prefer IPv6 server, microphone on game launch, stream stats |
-| Picture | Sharpening, 4K upscaling (64-bit PCs), Clarity boost, contrast, colour saturation, brightness |
-| Controller | The full list of controls, vibration strength, on-screen touch controller |
+| Stream | Resolution, connection check, stream as a Windows PC, GPU acceleration, prefer IPv6 server, keep stream quality steady, reconnect automatically, stay connected, microphone on game launch, instant replay, stream stats (with 60-second graphs) |
+| Picture | Sharpening, 4K upscaling with its size and sharpness (64-bit PCs), video clean-up, Clarity boost, contrast, colour saturation, brightness, picture settings per game |
+| Controller | The full list of controls, vibration strength, on-screen touch controller, controller battery, split screen (2-4 players), remember split-screen players |
 | Xbox dashboard | Disable social features, wait time on game pages, skip Xbox splash video, turn off post-game feedback, reduce animations, turn off analytics |
 | EmulationStation | The game list (Off / All cloud games / Free with ads / Games I pick), 3D game boxes |
 | Help and maintenance | Reload dashboard, clear cache, save logs for help, updates |

@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 GREEN = (16, 124, 16)
 LIME = (64, 190, 40)
-VERSION = 11  # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 11: covers with a banner kept at their top)
+VERSION = 12  # bump to redraw every box after a design change (6: the age-rating tile, 7: control badges, 11: covers with a banner kept at their top, 12: smaller control badges and rating tile)
 
 
 def _font(size):
@@ -92,29 +92,36 @@ def tile_text(age, label):
     return top, bottom, color, rule
 
 
-def _tile(face, rating, art_box):
+BADGE = 38    # the control badges' size
+TILE_H = 83   # the age-rating tile's height (it was 132 before version 12)
+
+
+def _tile(face, rating, art_box, k=(TILE_H - 2) / 130):
+    """The age-rating tile in the bottom-right corner of art_box (k: its size, from TILE_H)."""
     t = tile_text(*rating) if rating else None
     if not t:
         return
     top, bottom, color, rule = t
     d = ImageDraw.Draw(face)
-    ft, fb = _font(46), _font(32 if len(bottom) <= 4 else 24)
-    pad, gap = 16, 12
-    w = int(max(104, d.textlength(top, font=ft) + 2 * pad, d.textlength(bottom, font=fb) + 2 * pad))
-    h = 46 + gap * 2 + 2 + 32 + pad * 2 - 4
-    x1, y1 = art_box[2] - 22, art_box[3] - 22
+    q = lambda v: max(1, round(v * k))
+    ft, fb = _font(q(46)), _font(q(32) if len(bottom) <= 4 else q(24))
+    pad, gap = q(16), q(12)
+    w = int(max(q(104), d.textlength(top, font=ft) + 2 * pad, d.textlength(bottom, font=fb) + 2 * pad))
+    h = q(46) + gap * 2 + 2 + q(32) + pad * 2 - q(4)
+    x1, y1 = art_box[2] - 20, art_box[3] - 20
     x0, y0 = x1 - w, y1 - h
     # a soft shadow so it lifts off any cover, then the white edge and the tile
     sh = Image.new("L", face.size, 0)
-    ImageDraw.Draw(sh).rounded_rectangle([x0 + 3, y0 + 6, x1 + 3, y1 + 6], radius=18, fill=120)
-    face.paste((0, 0, 0), (0, 0), sh.filter(ImageFilter.GaussianBlur(8)))
-    d.rounded_rectangle([x0 - 5, y0 - 5, x1 + 5, y1 + 5], radius=22, fill="white")
-    d.rounded_rectangle([x0, y0, x1, y1], radius=17, fill=color)
+    ImageDraw.Draw(sh).rounded_rectangle([x0 + 3, y0 + 6, x1 + 3, y1 + 6], radius=q(18), fill=120)
+    face.paste((0, 0, 0), (0, 0), sh.filter(ImageFilter.GaussianBlur(q(8))))
+    e = q(5)
+    d.rounded_rectangle([x0 - e, y0 - e, x1 + e, y1 + e], radius=q(22), fill="white")
+    d.rounded_rectangle([x0, y0, x1, y1], radius=q(17), fill=color)
     cx = (x0 + x1) / 2
-    d.text((cx, y0 + pad + 23), top, font=ft, fill="white", anchor="mm")
-    ry = y0 + pad + 46 + gap
-    d.line([(x0 + 16, ry), (x1 - 16, ry)], fill=rule, width=3)
-    d.text((cx, ry + gap + 17), bottom, font=fb, fill=(250, 248, 240), anchor="mm")
+    d.text((cx, y0 + pad + q(23)), top, font=ft, fill="white", anchor="mm")
+    ry = y0 + pad + q(46) + gap
+    d.line([(x0 + q(16), ry), (x1 - q(16), ry)], fill=rule, width=max(2, q(3)))
+    d.text((cx, ry + gap + q(17)), bottom, font=fb, fill=(250, 248, 240), anchor="mm")
 
 
 # ---------- what the game can be played with (bottom left of the cover) ----------
@@ -179,27 +186,30 @@ def _icon_touch(s):
 ICONS = {"mkb": _icon_mkb, "touch": _icon_touch}
 
 
-def badges(face, features, art_box, size=112, gap=14, margin=22):
+def badges(face, features, art_box, size=BADGE, gap=6, margin=20):
     """The control badges in the bottom-left corner of art_box on face (in place)."""
     feats = [f for f in FEATURES if f in (features or ())]
     if not feats:
         return
     d = ImageDraw.Draw(face)
+    k = size / 112                       # the edge, corners and shadow keep the same look at any size
+    q = lambda v, lo=1: max(lo, round(v * k))
+    e = q(5, 2)
     y1 = art_box[3] - margin
     y0 = y1 - size
-    x = art_box[0] + margin
+    x = art_box[0] + margin + e
     sh = Image.new("L", face.size, 0)
     for _ in feats:
-        ImageDraw.Draw(sh).rounded_rectangle([x + 3, y0 + 6, x + size + 3, y1 + 6], radius=18, fill=120)
-        x += size + gap
-    face.paste((0, 0, 0), (0, 0), sh.filter(ImageFilter.GaussianBlur(8)))
-    x = art_box[0] + margin
+        ImageDraw.Draw(sh).rounded_rectangle([x + q(3), y0 + q(6), x + size + q(3), y1 + q(6)], radius=q(18), fill=120)
+        x += size + gap + 2 * e
+    face.paste((0, 0, 0), (0, 0), sh.filter(ImageFilter.GaussianBlur(q(8))))
+    x = art_box[0] + margin + e
     for f in feats:
-        d.rounded_rectangle([x - 5, y0 - 5, x + size + 5, y1 + 5], radius=22, fill="white")
-        d.rounded_rectangle([x, y0, x + size, y1], radius=17, fill=(22, 22, 22))
+        d.rounded_rectangle([x - e, y0 - e, x + size + e, y1 + e], radius=q(22), fill="white")
+        d.rounded_rectangle([x, y0, x + size, y1], radius=q(17), fill=(22, 22, 22))
         ic = ICONS[f](int(size * 0.8))
         face.paste(ic, (x + (size - ic.width) // 2, y0 + (size - ic.height) // 2), ic)
-        x += size + gap
+        x += size + gap + 2 * e
 
 
 def flat(cover, features, width=480):
@@ -208,7 +218,7 @@ def flat(cover, features, width=480):
     if img.width != width:
         img = img.resize((width, round(img.height * width / img.width)), Image.Resampling.LANCZOS)
     k = width / 640
-    badges(img, features, (0, 0, img.width, img.height), size=round(112 * k), gap=round(14 * k), margin=round(22 * k))
+    badges(img, features, (0, 0, img.width, img.height), size=round(38 * k), gap=round(6 * k), margin=round(20 * k))
     return img
 
 
