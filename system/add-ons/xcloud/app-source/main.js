@@ -102,8 +102,8 @@ const SHARPEN = ['off', 'low', 'medium', 'high'];
 const VIBRATION = [0, 25, 50, 75, 100];
 const BOOST = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600];
 // Region unlock: the address Xbox Cloud Gaming is told the requests come
-// from (X-Forwarded-For), a public address in that country, the same way as
-// the "Xbox Cloud Gaming Region Unlocker" script. No VPN; the same risk as one.
+// from (X-Forwarded-For): a public address in that country. No VPN; the same
+// risk as one.
 const UNLOCK = { au: '203.41.44.20', br: '200.221.11.101', eu: '194.25.0.68', jp: '122.1.0.154', kr: '203.253.64.1', us: '4.2.2.2' };
 const UNLOCK_CODES = ['off'].concat(Object.keys(UNLOCK));
 // the 4K upscaler is for 64-bit PCs (x86-64) only

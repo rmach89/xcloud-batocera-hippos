@@ -167,9 +167,8 @@ The rows are grouped in sections:
   Region unlock (no VPN)     off / Australia / Brazil / Europe / Japan /
                              Korea / United States. For where Xbox Cloud
                              Gaming isn't offered: Xbox is told you're in
-                             that country (the way the "Xbox Cloud Gaming
-                             Region Unlocker" script does it). No VPN, but
-                             the same risk as one, and that country's
+                             that country. No VPN, but the same risk as
+                             one, and that country's
                              servers may be far away (higher ping).
                              Applies after Reload dashboard
   Language                   the language of the app's own screens
@@ -540,7 +539,7 @@ What's new in 1.2.7
   by default).
 - 4K upscaling: choose its size (screen, 1080p, 1440p, 4K) and
   sharpness, in Settings and in quick settings during a game.
-- Video clean-up and Keep stream quality steady (like XFly).
+- Video clean-up and Keep stream quality steady.
 - Picture settings per game.
 - Stream stats: graphs of the last 60 seconds; on or off in quick
   settings too.
@@ -564,7 +563,7 @@ What's new in 1.2.6
 - 4K upscaling (64-bit PCs), Skip Xbox splash video, Turn off post-game
   feedback, Reduce animations and Turn off analytics. Settings has a
   new Xbox dashboard section for the options about the Xbox site.
-- New in Settings, like Better xCloud: Game volume boost (up to 600%),
+- New in Settings: Game volume boost (up to 600%),
   Region unlock without a VPN, Disable social features, Prefer IPv6
   server, Microphone on game launch, Wait time on game pages and an
   on-screen touch controller (see Settings).
