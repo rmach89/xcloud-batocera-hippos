@@ -73,6 +73,11 @@ const DEFAULTS = {
   touch_controller: false,   // see-through controller buttons over the game for touch screens
   no_social: false,          // don't load friends, messages and suggested people
   region_unlock: 'off',      // play as if in another country: 'off', 'au', 'br', 'eu', 'jp', 'kr' or 'us'
+  upscale_4k: false,         // 64-bit PCs: the stream scaled up to the screen on the graphics chip, then sharpened
+  skip_splash: false,        // skip the Xbox splash video as a game starts
+  no_feedback: false,        // no "how was it?" questions after a game
+  reduce_anim: false,        // fewer animations on the dashboard (smoother on slower devices)
+  no_analytics: false,       // don't send Xbox's usage statistics
   language: 'auto',          // 'auto' = the same as Batocera
   controller_fix: true,      // put controllers the browser doesn't know (Steam Deck...) in the Xbox layout
   game_list: 'off',          // EmulationStation's Xbox Cloud list: 'off' (just the app), 'all' cloud games, 'free' (free with ads) or 'picked' ones
@@ -90,6 +95,11 @@ const BOOST = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600];
 // the "Xbox Cloud Gaming Region Unlocker" script. No VPN; the same risk as one.
 const UNLOCK = { au: '203.41.44.20', br: '200.221.11.101', eu: '194.25.0.68', jp: '122.1.0.154', kr: '203.253.64.1', us: '4.2.2.2' };
 const UNLOCK_CODES = ['off'].concat(Object.keys(UNLOCK));
+// the 4K upscaler is for 64-bit PCs (x86-64) only
+const X64 = process.arch === 'x64';
+// Xbox's usage statistics and error reports (Disable analytics)
+const ANALYTICS_URLS = ['*://arc.msn.com/*', '*://browser.events.data.microsoft.com/*', '*://dc.services.visualstudio.com/*', '*://*.ingest.sentry.io/*',
+  '*://js.monitor.azure.com/*', '*://*.clarity.ms/*'];
 const PICTURE = ['video_contrast', 'video_saturation', 'video_brightness'];
 // 50-150 in steps of 5; anything else is 100 (unchanged)
 function pictureLevel(v) { const n = Number(v); return Number.isFinite(n) ? Math.round(Math.min(150, Math.max(50, n)) / 5) * 5 : 100; }
@@ -100,6 +110,7 @@ function streamCfg() {
   return { res: cfg.stream_resolution, sharpen: SHARPEN.indexOf(cfg.video_sharpen), clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration,
     contrast: cfg.video_contrast, saturation: cfg.video_saturation, brightness: cfg.video_brightness,
     boost: cfg.audio_boost, vol: appVolume(), ipv6: cfg.prefer_ipv6, wait: cfg.wait_time, mic: cfg.mic_on_launch,
+    up: cfg.upscale_4k && X64, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim,
     waitT: { label: i18n.t(cfg.language, 'waitLabel'), none: i18n.t(cfg.language, 'waitNone'), min: i18n.t(cfg.language, 'waitMin') } };
 }
 function streamScript() {
@@ -172,7 +183,7 @@ function loadConfig(profileId) {
   cfg.vibration = Number.isFinite(vib) ? Math.round(Math.min(100, Math.max(0, vib)) / 25) * 25 : DEFAULTS.vibration;
   const boost = Number(cfg.audio_boost);
   cfg.audio_boost = Number.isFinite(boost) ? Math.round(Math.min(600, Math.max(100, boost)) / 50) * 50 : 100;
-  for (const k of ['prefer_ipv6', 'mic_on_launch', 'touch_controller', 'no_social']) cfg[k] = cfg[k] === true;
+  for (const k of ['prefer_ipv6', 'mic_on_launch', 'touch_controller', 'no_social', 'upscale_4k', 'skip_splash', 'no_feedback', 'reduce_anim', 'no_analytics']) cfg[k] = cfg[k] === true;
   cfg.wait_time = cfg.wait_time !== false;
   cfg.region_unlock = UNLOCK_CODES.includes(cfg.region_unlock) ? cfg.region_unlock : 'off';
   const iv = Number(cfg.intro_volume);
@@ -264,7 +275,7 @@ function sessionFor(p) {
 }
 function curSession() { return sessionFor(curProfile); }
 const sessionsReady = new Set();
-let unlockLogged = false, socialLogged = false;
+let unlockLogged = false, socialLogged = false, analyticsLogged = false;
 const SOCIAL_URLS = ['*://peoplehub.xboxlive.com/users/me/people/social*', '*://peoplehub.xboxlive.com/users/me/people/recommendations*',
   '*://xblmessaging.xboxlive.com/network/xbox/users/me/inbox*', '*://xblmessaging.xboxlive.com/network/xbox/users/me/conversations*'];
 function hostOf(u) { try { return new URL(u).hostname; } catch (e) { return ''; } }
@@ -300,9 +311,11 @@ function setupSession(ses) {
   } catch (e) { log(`region unlock not available: ${e.message}`); }
   // Disable social features: friends, messages and suggested people aren't loaded
   try {
-    ses.webRequest.onBeforeRequest({ urls: SOCIAL_URLS }, (details, cb) => {
-      if (!cfg.no_social) { cb({}); return; }
-      if (!socialLogged) { socialLogged = true; log('social features off: friends, messages and suggestions not loaded'); }
+    ses.webRequest.onBeforeRequest({ urls: SOCIAL_URLS.concat(ANALYTICS_URLS) }, (details, cb) => {
+      const social = /peoplehub|xblmessaging/i.test(details.url);
+      if (social ? !cfg.no_social : !cfg.no_analytics) { cb({}); return; }
+      if (social && !socialLogged) { socialLogged = true; log('social features off: friends, messages and suggestions not loaded'); }
+      if (!social && !analyticsLogged) { analyticsLogged = true; log('analytics off: Xbox usage statistics not sent'); }
       cb({ cancel: true });
     });
   } catch (e) { log(`social features switch not available: ${e.message}`); }
@@ -665,7 +678,8 @@ function settingsHtml() {
     'updT', 'updHelp', 'updBtn', 'updChecking', 'updNone', 'updGetting', 'updDone', 'updFail',
     'ctrlT', 'ctrlHelp', 'ctrlBtn', 'ctrlBack', 'soeT', 'soeHelp', 'profT', 'profHelp', 'profHelpNone', 'profBtn', 'glT', 'glOff', 'glAll', 'glFree', 'glPick', 'glHelpOff', 'glHelpAll', 'glHelpFree', 'glHelpPick', 'glCount', 'gpT', 'gpOnly', 'glBusy', 'g3dT', 'g3dHelp', 'logsT', 'logsHelp', 'logsBtn', 'logsBusy', 'logsDone', 'logsFail', 'cacheT', 'cacheHelp', 'cacheBtn', 'cacheBusy', 'cacheDone',
     'unlockT', 'unlockHelp', 'unlockEu', 'boostT', 'boostHelp', 'socialT', 'socialHelp', 'ipv6T', 'ipv6Help', 'micT', 'micHelp', 'waitT', 'waitHelp', 'touchT', 'touchHelp',
-    'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b', 'c10a', 'c10b'];
+    'secDash', 'upT', 'upHelp', 'splashT', 'splashHelp', 'fbT', 'fbHelp', 'animT', 'animHelp', 'anaT', 'anaHelp',
+    'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b', 'c10a', 'c10b', 'c11a', 'c11b'];
   const T = {};
   for (const [code] of i18n.LANGS) {
     T[code] = Object.fromEntries(KEYS.map(k => [k, i18n.t(code, k)]));
@@ -681,6 +695,7 @@ function settingsHtml() {
     res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration,
     pic: { ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness },
     unlock: cfg.region_unlock, unlocks: UNLOCK_CODES, boost: cfg.audio_boost, social: cfg.no_social, ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller,
+    x64: X64, up: cfg.upscale_4k, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim, ana: cfg.no_analytics,
     ivol: cfg.intro_volume, imute: cfg.intro_muted,
     engine: process.versions.electron, appv: VERSION, upd,
     glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun, glPct,
@@ -813,10 +828,6 @@ function settingsHtml() {
     <div class="picker"><span class="arrow" id="idown">&minus;</span><span class="bar" style="width:200px"><i id="ibar"></i></span><span class="arrow" id="iup">+</span><span class="pct" id="ipct" style="min-width:96px"></span>
     <span class="toggle" id="imute" style="margin-left:6px"></span></div>
   </div>
-  <div class="row" id="row-social">
-    <div><div class="label" data-k="socialT"></div><div class="help" data-k="socialHelp"></div></div>
-    <div class="picker"><span class="state" id="social-state"></span><span class="toggle" id="social"></span></div>
-  </div>
   <div class="sec" data-k="secStream"></div>
   <div class="row" id="row-res">
     <div><div class="label" data-k="resT"></div><div class="help" id="res-help"></div></div>
@@ -842,14 +853,14 @@ function settingsHtml() {
     <div><div class="label" data-k="statsT"></div><div class="help" data-k="statsHelp"></div></div>
     <div class="picker"><span class="state" id="stats-state"></span><span class="toggle" id="stats"></span></div>
   </div>
-  <div class="row" id="row-wait">
-    <div><div class="label" data-k="waitT"></div><div class="help" data-k="waitHelp"></div></div>
-    <div class="picker"><span class="state" id="wait-state"></span><span class="toggle" id="wait"></span></div>
-  </div>
   <div class="sec" data-k="secPic"></div>
   <div class="row" id="row-sharpen">
     <div><div class="label" data-k="shT"></div><div class="help" data-k="shHelp"></div></div>
     <div class="picker"><span class="arrow" id="shprev">&#9664;</span><span class="value" id="sharpen" style="width:220px"></span><span class="arrow" id="shnext">&#9654;</span></div>
+  </div>
+  <div class="row" id="row-up" style="display:${X64 ? 'flex' : 'none'}">
+    <div><div class="label" data-k="upT"></div><div class="help" data-k="upHelp"></div></div>
+    <div class="picker"><span class="state" id="up-state"></span><span class="toggle" id="up"></span></div>
   </div>
   <div class="row" id="row-clarity">
     <div><div class="label" data-k="clT"></div><div class="help" data-k="clHelp"></div></div>
@@ -879,6 +890,31 @@ function settingsHtml() {
   <div class="row" id="row-touch">
     <div><div class="label" data-k="touchT"></div><div class="help" data-k="touchHelp"></div></div>
     <div class="picker"><span class="state" id="touch-state"></span><span class="toggle" id="touch"></span></div>
+  </div>
+  <div class="sec" data-k="secDash"></div>
+  <div class="row" id="row-social">
+    <div><div class="label" data-k="socialT"></div><div class="help" data-k="socialHelp"></div></div>
+    <div class="picker"><span class="state" id="social-state"></span><span class="toggle" id="social"></span></div>
+  </div>
+  <div class="row" id="row-wait">
+    <div><div class="label" data-k="waitT"></div><div class="help" data-k="waitHelp"></div></div>
+    <div class="picker"><span class="state" id="wait-state"></span><span class="toggle" id="wait"></span></div>
+  </div>
+  <div class="row" id="row-splash">
+    <div><div class="label" data-k="splashT"></div><div class="help" data-k="splashHelp"></div></div>
+    <div class="picker"><span class="state" id="splash-state"></span><span class="toggle" id="splash"></span></div>
+  </div>
+  <div class="row" id="row-fb">
+    <div><div class="label" data-k="fbT"></div><div class="help" data-k="fbHelp"></div></div>
+    <div class="picker"><span class="state" id="fb-state"></span><span class="toggle" id="fb"></span></div>
+  </div>
+  <div class="row" id="row-anim">
+    <div><div class="label" data-k="animT"></div><div class="help" data-k="animHelp"></div></div>
+    <div class="picker"><span class="state" id="anim-state"></span><span class="toggle" id="anim"></span></div>
+  </div>
+  <div class="row" id="row-ana">
+    <div><div class="label" data-k="anaT"></div><div class="help" data-k="anaHelp"></div></div>
+    <div class="picker"><span class="state" id="ana-state"></span><span class="toggle" id="ana"></span></div>
   </div>
   <div class="sec" data-k="secBato"></div>
   <div class="row" id="row-glist">
@@ -940,10 +976,11 @@ function settingsHtml() {
   function buildRows() {
     // the same order as on screen, section by section
     rows = (S.reload ? ['row-user'] : []).concat(['row-signout', 'row-soe'])
-      .concat(['row-region', 'row-unlock', 'row-language', 'row-volume', 'row-boost', 'row-highlight', 'row-intro', 'row-isound', 'row-social'])
-      .concat(['row-res', 'row-windows', 'row-gpu', 'row-ipv6', 'row-mic', 'row-stats', 'row-wait'])
-      .concat(['row-sharpen', 'row-clarity', 'row-ct', 'row-sa', 'row-br'])
+      .concat(['row-region', 'row-unlock', 'row-language', 'row-volume', 'row-boost', 'row-highlight', 'row-intro', 'row-isound'])
+      .concat(['row-res', 'row-windows', 'row-gpu', 'row-ipv6', 'row-mic', 'row-stats'])
+      .concat(['row-sharpen'].concat(S.x64 ? ['row-up'] : []).concat(['row-clarity', 'row-ct', 'row-sa', 'row-br']))
       .concat(['row-controls', 'row-vib', 'row-touch'])
+      .concat(['row-social', 'row-wait', 'row-splash', 'row-fb', 'row-anim', 'row-ana'])
       .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : []))
       .concat(S.reload ? ['row-reload'] : []).concat(['row-cache', 'row-logs', 'row-update', 'buttons']);
     LAST = rows.length - 1;
@@ -999,7 +1036,7 @@ function settingsHtml() {
     var vars = { view: n.view, menu: n.menu, t: T._t, t1: T._t1 };
     var list = $('clist');
     list.textContent = '';
-    for (var i = 1; i <= 10; i++) {
+    for (var i = 1; i <= 11; i++) {
       var r = document.createElement('div'); r.className = 'crow';
       var k = document.createElement('div'); k.className = 'k'; k.textContent = tx('c' + i + 'a', vars);
       var d = document.createElement('div'); d.className = 'd'; d.textContent = tx('c' + i + 'b', vars);
@@ -1078,7 +1115,7 @@ function settingsHtml() {
     $('unlock').textContent = unlockName(S.unlocks[ui_]);
     $('bobar').style.width = (S.boost - 100) / 5 + '%';
     $('bopct').textContent = S.boost + '%';
-    ['social', 'ipv6', 'mic', 'wait', 'touch'].forEach(function (k) {
+    ['social', 'ipv6', 'mic', 'wait', 'touch', 'up', 'splash', 'fb', 'anim', 'ana'].forEach(function (k) {
       $(k).className = 'toggle' + (S[k] ? ' yes' : '');
       $(k + '-state').textContent = S[k] ? tx('on') : tx('off');
     });
@@ -1112,6 +1149,7 @@ function settingsHtml() {
        '&volume=' + S.volume + '&highlight=' + (S.highlight ? 1 : 0) + '&intro=' + INTRO[ii] + '&windows=' + (S.windows ? 1 : 0) +
        '&res=' + RES[rsi] + '&sharpen=' + SH[shi] + '&clarity=' + (S.clarity ? 1 : 0) + '&ct=' + S.pic.ct + '&sa=' + S.pic.sa + '&br=' + S.pic.br + '&gpu=' + (S.gpu ? 1 : 0) + '&stats=' + (S.stats ? 1 : 0) + '&vib=' + S.vib +
        '&unlock=' + S.unlocks[ui_] + '&boost=' + S.boost + '&social=' + (S.social ? 1 : 0) + '&ipv6=' + (S.ipv6 ? 1 : 0) + '&mic=' + (S.mic ? 1 : 0) + '&wait=' + (S.wait ? 1 : 0) + '&touch=' + (S.touch ? 1 : 0) +
+       '&up=' + (S.up ? 1 : 0) + '&splash=' + (S.splash ? 1 : 0) + '&fb=' + (S.fb ? 1 : 0) + '&anim=' + (S.anim ? 1 : 0) + '&ana=' + (S.ana ? 1 : 0) +
        '&ivol=' + S.ivol + '&imute=' + (S.imute ? 1 : 0) + '&vmute=' + (S.vmute ? 1 : 0) + '&soe=' + (S.soe ? 1 : 0) + '&glist=' + GL[gi] + '&g3d=' + (S.g3d ? 1 : 0) +
          (S.game ? '&gid=' + S.game.id + '&gslug=' + encodeURIComponent(S.game.slug) + '&gpick=' + (S.gpicked ? 1 : 0) : ''));
   }
@@ -1180,6 +1218,11 @@ function settingsHtml() {
     else if (r === 'row-mic') S.mic = !S.mic;
     else if (r === 'row-wait') S.wait = !S.wait;
     else if (r === 'row-touch') S.touch = !S.touch;
+    else if (r === 'row-up') S.up = !S.up;
+    else if (r === 'row-splash') S.splash = !S.splash;
+    else if (r === 'row-fb') S.fb = !S.fb;
+    else if (r === 'row-anim') S.anim = !S.anim;
+    else if (r === 'row-ana') S.ana = !S.ana;
     else if (r === 'row-gpu') S.gpu = !S.gpu;
     else if (r === 'row-clarity') S.clarity = !S.clarity;
     else if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { var pk = r.slice(4); S.pic[pk] = Math.min(150, Math.max(50, S.pic[pk] + step * 5)); }
@@ -1244,7 +1287,7 @@ function settingsHtml() {
   ['row-region', 'row-language', 'row-volume', 'row-intro', 'row-glist', 'row-res', 'row-sharpen', 'row-vib', 'row-ct', 'row-sa', 'row-br', 'row-unlock', 'row-boost'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); render(); });
   });
-  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d', 'row-social', 'row-ipv6', 'row-mic', 'row-wait', 'row-touch'].forEach(function (id) {
+  ['row-highlight', 'row-windows', 'row-gpu', 'row-clarity', 'row-stats', 'row-soe', 'row-gpick', 'row-g3d', 'row-social', 'row-ipv6', 'row-mic', 'row-wait', 'row-touch', 'row-up', 'row-splash', 'row-fb', 'row-anim', 'row-ana'].forEach(function (id) {
     $(id).addEventListener('click', function () { row = rowOf(id); change(1); });
   });
   $('row-reload').addEventListener('click', function () { row = rowOf('row-reload'); render(); reload(); });
@@ -1345,7 +1388,8 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
   if (VIBRATION.includes(stream.vib)) obj.vibration = cfg.vibration = stream.vib;
   if (UNLOCK_CODES.includes(stream.unlock)) obj.region_unlock = cfg.region_unlock = stream.unlock;
   if (BOOST.includes(stream.boost)) obj.audio_boost = cfg.audio_boost = stream.boost;
-  for (const [k, q] of [['no_social', 'social'], ['prefer_ipv6', 'ipv6'], ['mic_on_launch', 'mic'], ['wait_time', 'wait'], ['touch_controller', 'touch']]) {
+  for (const [k, q] of [['no_social', 'social'], ['prefer_ipv6', 'ipv6'], ['mic_on_launch', 'mic'], ['wait_time', 'wait'], ['touch_controller', 'touch'],
+    ['upscale_4k', 'up'], ['skip_splash', 'splash'], ['no_feedback', 'fb'], ['reduce_anim', 'anim'], ['no_analytics', 'ana']]) {
     if (typeof stream[q] === 'boolean') obj[k] = cfg[k] = stream[q];
   }
   if (language === 'auto' || (language && i18n.STRINGS[language])) {
@@ -1363,7 +1407,8 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
         stream_resolution: cfg.stream_resolution, video_sharpen: cfg.video_sharpen, clarity_boost: cfg.clarity_boost,
         video_contrast: cfg.video_contrast, video_saturation: cfg.video_saturation, video_brightness: cfg.video_brightness, stream_stats: cfg.stream_stats, vibration: cfg.vibration,
         region_unlock: cfg.region_unlock, audio_boost: cfg.audio_boost, no_social: cfg.no_social, prefer_ipv6: cfg.prefer_ipv6,
-        mic_on_launch: cfg.mic_on_launch, wait_time: cfg.wait_time, touch_controller: cfg.touch_controller
+        mic_on_launch: cfg.mic_on_launch, wait_time: cfg.wait_time, touch_controller: cfg.touch_controller,
+        upscale_4k: cfg.upscale_4k, skip_splash: cfg.skip_splash, no_feedback: cfg.no_feedback, reduce_anim: cfg.reduce_anim, no_analytics: cfg.no_analytics
       });
       if (gpuChanged) {
         let base = {};
@@ -1373,7 +1418,7 @@ function saveSettings(region, volume, highlight, language, intro, asWindows, int
       }
     } else fs.writeFileSync(CONFIG, JSON.stringify(obj, null, 2) + '\n');
     if (gpuChanged) log(`GPU acceleration turned ${cfg.gpu_acceleration ? 'on' : 'off'}: it applies the next time the app opens`);
-    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, region unlock ${cfg.region_unlock}, volume boost ${cfg.audio_boost}%, social ${cfg.no_social ? 'off' : 'on'}, prefer IPv6 ${cfg.prefer_ipv6 ? 'on' : 'off'}, microphone on launch ${cfg.mic_on_launch ? 'on' : 'off'}, wait time ${cfg.wait_time ? 'on' : 'off'}, touch controller ${cfg.touch_controller ? 'on' : 'off'}, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
+    log(`settings saved${curProfile ? ` for ${profileName(curProfile)}` : ''}: region ${currentRegion()}, language ${cfg.languageChoice === 'auto' ? `same as Batocera (${cfg.language})` : cfg.language}, intro ${cfg.introMode} (sound ${cfg.intro_muted ? 'muted' : cfg.intro_volume + '%'}), stream as Windows ${cfg.stream_as_windows ? 'on' : 'off'}, resolution ${cfg.stream_resolution}, sharpening ${cfg.video_sharpen}, clarity boost ${cfg.clarity_boost ? 'on' : 'off'}, picture ${cfg.video_contrast}/${cfg.video_saturation}/${cfg.video_brightness}%, stream stats ${cfg.stream_stats ? 'on' : 'off'}, vibration ${cfg.vibration}%, region unlock ${cfg.region_unlock}, volume boost ${cfg.audio_boost}%, social ${cfg.no_social ? 'off' : 'on'}, prefer IPv6 ${cfg.prefer_ipv6 ? 'on' : 'off'}, microphone on launch ${cfg.mic_on_launch ? 'on' : 'off'}, wait time ${cfg.wait_time ? 'on' : 'off'}, touch controller ${cfg.touch_controller ? 'on' : 'off'}, 4K upscaling ${cfg.upscale_4k ? 'on' : 'off'}${X64 ? '' : ' (not on this machine)'}, skip splash ${cfg.skip_splash ? 'on' : 'off'}, post-game feedback ${cfg.no_feedback ? 'off' : 'on'}, reduce animations ${cfg.reduce_anim ? 'on' : 'off'}, analytics ${cfg.no_analytics ? 'off' : 'on'}, volume ${cfg.volume}%${cfg.muted ? ' (muted)' : ''}, key highlights ${highlight ? 'on' : 'off'}`);
   } catch (e) {
     log(`could not save settings: ${e.message}`);
   }
@@ -2176,14 +2221,48 @@ function qpSave() {
     cfg.intro_volume, cfg.intro_muted, cfg.muted, cfg.sign_out_on_exit,
     { res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness,
       stats: cfg.stream_stats, vib: cfg.vibration, gpu: cfg.gpu_acceleration, unlock: cfg.region_unlock, boost: cfg.audio_boost, social: cfg.no_social,
-      ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller });
+      ipv6: cfg.prefer_ipv6, mic: cfg.mic_on_launch, wait: cfg.wait_time, touch: cfg.touch_controller,
+      up: cfg.upscale_4k, splash: cfg.skip_splash, fb: cfg.no_feedback, anim: cfg.reduce_anim, ana: cfg.no_analytics });
 }
 ipcMain.on('xcloud-qp', (event, open) => {
   qpOpen = !!open;
   const wc = event.sender;
   wc.executeJavaScript(`${PAD_GATE} window.__xcloudPadsBlocked = ${qpOpen ? 'true' : "'release'"};`).catch(() => { /* page between loads */ });
-  if (qpOpen) { log('quick settings opened in a game'); try { wc.send('xcloud-qp-state', qpState()); } catch (e) { /* ignore */ } }
+  if (qpOpen) {
+    log('quick settings opened in a game');
+    try { fs.writeFileSync(QP_HINT_FILE, String(QP_HINT_MAX)); } catch (e) { /* ignore */ }
+    try { wc.send('xcloud-qp-state', qpState()); } catch (e) { /* ignore */ }
+  }
   else { log('quick settings closed'); qpSave(); }
+});
+// a screenshot from quick settings (or PrintScreen): a PNG of the game's
+// picture with the picture settings in it, in Batocera's screenshots folder
+const SHOTS_DIR = process.env.XCLOUD_SHOTS_DIR || '/userdata/screenshots';
+ipcMain.on('xcloud-shot', (event, m) => {
+  const wc = event.sender;
+  try {
+    const data = String((m && m.png) || '');
+    if (!/^data:image\/png;base64,/.test(data) || data.length > 60 * 1024 * 1024) throw new Error('no picture');
+    fs.mkdirSync(SHOTS_DIR, { recursive: true });
+    const d = new Date(), z = n => String(n).padStart(2, '0');
+    const name = `xcloud-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.png`;
+    fs.writeFileSync(path.join(SHOTS_DIR, name), Buffer.from(data.split(',')[1], 'base64'));
+    log(`screenshot saved: ${path.join(SHOTS_DIR, name)} (${m.w}x${m.h})`);
+    wc.send('xcloud-toast', i18n.t(cfg.language, 'shotDone', { f: name }), 3000);
+  } catch (e) {
+    log(`screenshot not saved: ${e.message}`);
+    try { wc.send('xcloud-toast', i18n.t(cfg.language, 'shotFail'), 3000); } catch (e2) { /* ignore */ }
+  }
+});
+// "Hold LB + RB + View: quick settings" as a game starts, the first few
+// times; never again once quick settings has been opened
+const QP_HINT_FILE = path.join(HOME, 'quick-hint-count'), QP_HINT_MAX = 5;
+ipcMain.on('xcloud-qp-hint', event => {
+  let n = 0;
+  try { n = parseInt(fs.readFileSync(QP_HINT_FILE, 'utf8'), 10) || 0; } catch (e) { /* none yet */ }
+  if (n >= QP_HINT_MAX) return;
+  try { fs.writeFileSync(QP_HINT_FILE, String(n + 1)); } catch (e) { /* ignore */ }
+  try { event.sender.send('xcloud-qp-hint-show', 1); } catch (e) { /* ignore */ }
 });
 ipcMain.on('xcloud-qp-set', (event, m) => {
   const k = m && m.k, v = m && m.v, n = Number(v);
@@ -2415,7 +2494,9 @@ function handleAction(wc, url) {
         ct: q.has('ct') ? Number(q.get('ct')) : NaN, sa: q.has('sa') ? Number(q.get('sa')) : NaN, br: q.has('br') ? Number(q.get('br')) : NaN, stats: q.has('stats') ? q.get('stats') === '1' : undefined, vib: q.has('vib') ? Number(q.get('vib')) : undefined,
         unlock: q.get('unlock'), boost: q.has('boost') ? Number(q.get('boost')) : undefined,
         social: q.has('social') ? q.get('social') === '1' : undefined, ipv6: q.has('ipv6') ? q.get('ipv6') === '1' : undefined,
-        mic: q.has('mic') ? q.get('mic') === '1' : undefined, wait: q.has('wait') ? q.get('wait') === '1' : undefined, touch: q.has('touch') ? q.get('touch') === '1' : undefined });
+        mic: q.has('mic') ? q.get('mic') === '1' : undefined, wait: q.has('wait') ? q.get('wait') === '1' : undefined, touch: q.has('touch') ? q.get('touch') === '1' : undefined,
+        up: q.has('up') ? q.get('up') === '1' : undefined, splash: q.has('splash') ? q.get('splash') === '1' : undefined, fb: q.has('fb') ? q.get('fb') === '1' : undefined,
+        anim: q.has('anim') ? q.get('anim') === '1' : undefined, ana: q.has('ana') ? q.get('ana') === '1' : undefined });
     // the stream options change on the dashboard straight away (the resolution from the next game)
     applyStreamOptions(mainWin && mainWin.webContents);
     try { mainWin && mainWin.webContents.send('xcloud-touch', cfg.touch_controller); } catch (e) { /* ignore */ }
@@ -3580,7 +3661,7 @@ function createWindow() {
 function preloadText() {
   const L = cfg.language;
   const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone', 'rowHint',
-    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
+    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'qpShot', 'qpShotGo', 'qpTip', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
   const text = Object.fromEntries(keys.map(k => [k, i18n.t(L, k)]));
   // the Japanese / Korean letters, for the keyboard and messages on the Xbox page
   return { lang: L, text, fontCss: L === 'ja' || L === 'ko' ? i18n.FONT_CSS : '', fontStack: i18n.FONT_STACK };

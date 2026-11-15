@@ -22,6 +22,9 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 - **Game volume boost** up to 600%, **Prefer IPv6 server**, **Microphone on game launch**, and the **wait time** for a server on each game's page.
 - **Region unlock without a VPN** (Australia, Brazil, Europe, Japan, Korea, United States) for where Xbox Cloud Gaming isn't offered, and **Disable social features** for a faster dashboard.
 - An **on-screen touch controller**: see-through buttons over the game for touch screens.
+- **4K upscaling** on 64-bit PCs: the stream drawn at the screen's full resolution and sharpened on the graphics chip (Xbox sends at most 1440p; this uses more of the GPU).
+- **Quick settings in a game** (hold LB + RB + View, or F9): sound and picture over the game, and **screenshots** with the picture settings in them, saved to `/userdata/screenshots`.
+- **Skip the Xbox splash video**, **turn off post-game feedback**, **reduce animations** and **turn off analytics** for slower devices.
 
 **EmulationStation game list** (optional)
 - **All cloud games** (about 570), **Free with ads** (the games anyone can play free with ads, no Game Pass needed), **Games I pick** (add a game with F8 or LB + RB + LT + RT), or **Off** (just the app itself).
@@ -88,6 +91,7 @@ bash /tmp/xcloud-install.sh
 | Add or remove the current game in EmulationStation's list | hold LB + RB + LT + RT | hold L1 + R1 + L2 + R2 | F8 |
 | Open a whole row (its title) on the dashboard | hold View on a game in it (1 s) | hold Share/Create | — |
 | Quick settings in a game (sound and picture) | hold LB + RB + View (1 s) | hold L1 + R1 + Share/Create | F9 |
+| Screenshot in a game | Quick settings → Take a screenshot | the same | PrintScreen |
 
 The first few times you move onto a row with the controller, a hint at the bottom shows how to open it ("Hold View to open Stream for free with ads").
 
@@ -98,10 +102,11 @@ In Settings: up and down to move, left and right to change, A to select, Menu to
 | Section | What's in it |
 |---|---|
 | Profile and account | Change user, sign out of Xbox, sign out when closing |
-| General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound, disable social features |
-| Stream | Resolution, stream as a Windows PC, GPU acceleration, prefer IPv6 server, microphone on game launch, stream stats, wait time on game pages |
-| Picture | Sharpening, Clarity boost, contrast, colour saturation, brightness |
+| General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound |
+| Stream | Resolution, stream as a Windows PC, GPU acceleration, prefer IPv6 server, microphone on game launch, stream stats |
+| Picture | Sharpening, 4K upscaling (64-bit PCs), Clarity boost, contrast, colour saturation, brightness |
 | Controller | The full list of controls, vibration strength, on-screen touch controller |
+| Xbox dashboard | Disable social features, wait time on game pages, skip Xbox splash video, turn off post-game feedback, reduce animations, turn off analytics |
 | EmulationStation | The game list (Off / All cloud games / Free with ads / Games I pick), 3D game boxes |
 | Help and maintenance | Reload dashboard, clear cache, save logs for help, updates |
 

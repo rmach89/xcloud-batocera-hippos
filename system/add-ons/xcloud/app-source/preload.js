@@ -610,6 +610,7 @@ setInterval(touchCheck, 500);
 // Esc) closes. Xbox doesn't get the controller while it's up (main.js).
 const QP = { open: false, el: null, row: 0, v: null };
 const QP_ROWS = [
+  { k: 'shot', t: 'qpShot', action: true },
   { sec: 'qpAudio' },
   { k: 'volume', t: 'volume', min: 0, max: 100, step: 10, def: 100 },
   { k: 'boost', t: 'boostT', min: 100, max: 600, step: 50, def: 100 },
@@ -640,6 +641,7 @@ const QP_CSS = `
   #xcloud-qp .hint{margin-top:18px;font-size:15px;color:#9a9a9a}`;
 function qpStreaming() { return !!document.querySelector('#game-stream video'); }
 function qpText(r) {
+  if (r.action) return TXT.qpShotGo || 'A';
   const v = QP.v[r.k];
   if (r.k === 'volume' && QP.v.muted) return TXT.muted || 'Muted';
   if (r.toggle) return v ? TXT.on : TXT.off;
@@ -662,6 +664,7 @@ function qpRender() {
 function qpChange(dir, idx) {
   const r = QP_ITEMS[idx == null ? QP.row : idx];
   if (!r || !QP.v) return;
+  if (r.action) { if (dir === 0) { qpToggle('screenshot'); setTimeout(() => takeShot('quick settings'), 250); } return; }
   let v = QP.v[r.k];
   if (dir === 0) v = r.def;
   else if (r.toggle) v = !v;
@@ -682,11 +685,12 @@ function qpBuild() {
     if (!r.k) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = TXT[r.sec] || r.sec; el.appendChild(d); continue; }
     const idx = i++;
     const row = document.createElement('div'); row.className = 'r'; row.dataset.k = r.k;
-    row.innerHTML = '<div class="top"><span class="lab"></span><span class="ctl"><span class="pm" data-d="-1">\u2212</span><span class="val"></span><span class="pm" data-d="1">+</span></span></div>' +
+    row.innerHTML = r.action ? '<div class="top"><span class="lab"></span><span class="ctl"><span class="val"></span></span></div>' :
+      '<div class="top"><span class="lab"></span><span class="ctl"><span class="pm" data-d="-1">\u2212</span><span class="val"></span><span class="pm" data-d="1">+</span></span></div>' +
       (r.min != null ? '<div class="bar"><i></i></div>' : '');
     row.querySelector('.lab').textContent = TXT[r.t] || r.k;
     row.querySelectorAll('.pm').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); QP.row = idx; qpChange(Number(b.dataset.d), idx); }));
-    row.addEventListener('click', () => { QP.row = idx; qpRender(); });
+    row.addEventListener('click', () => { QP.row = idx; if (r.action) qpChange(0, idx); else qpRender(); });
     el.appendChild(row);
   }
   const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = TXT.qpHint || ''; el.appendChild(hint);
@@ -734,9 +738,42 @@ function qpPress(b) {
   else if (b === BTN.B) { qpToggle('B'); return; }
   qpRender();
 }
+// a screenshot of the game: its picture as it looks on screen (with the
+// picture settings, and upscaled when the 4K upscaler is on), saved by the
+// app as a PNG in Batocera's screenshots folder
+function takeShot(why) {
+  try {
+    const v = document.querySelector('#game-stream video');
+    if (!v || !v.videoWidth) { appLog('screenshot: no game on screen'); return; }
+    const up = document.getElementById('xcloud-up');
+    const src = up && up.style.display !== 'none' && up.width ? up : v;
+    const w = src === v ? v.videoWidth : up.width, h = src === v ? v.videoHeight : up.height;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    const rule = ((document.getElementById('xcloud-sharpen-css') || {}).textContent || '').match(/filter:\s*([^!;]+)/);
+    if (rule) { try { ctx.filter = rule[1].trim(); } catch (e) { /* drawn without */ } }
+    ctx.drawImage(src, 0, 0, w, h);
+    ipcRenderer.send('xcloud-shot', { png: c.toDataURL('image/png'), w, h });
+    appLog(`screenshot taken (${why}): ${w}x${h}${rule ? ', with the picture settings' : ''}`);
+  } catch (e) { appLog('screenshot failed: ' + e.message); }
+}
+// as a game starts: how to open quick settings (the first few times; main.js counts)
+ipcRenderer.on('xcloud-qp-hint-show', () => {
+  if (QP.open || OVERLAY_UP || !qpStreaming()) return;
+  toast(fill(TXT.qpTip || 'Hold LB + RB + {view}: quick settings', { view: viewLabel() }), 6000);
+  appLog('quick settings hint shown');
+});
+let qpWasStreaming = false, qpHintTimer = null;
+setInterval(() => {
+  if (!ON_DASH) return;
+  const now = qpStreaming();
+  if (now && !qpWasStreaming) { clearTimeout(qpHintTimer); qpHintTimer = setTimeout(() => { if (qpStreaming()) ipcRenderer.send('xcloud-qp-hint'); }, 4000); }
+  qpWasStreaming = now;
+}, 1000);
 if (ON_DASH) {
   window.addEventListener('keydown', e => {
     if (e.key === 'F9') { e.preventDefault(); e.stopPropagation(); qpToggle('F9'); return; }
+    if (e.key === 'PrintScreen' && qpStreaming()) { e.preventDefault(); e.stopPropagation(); if (QP.open) qpToggle('screenshot'); setTimeout(() => takeShot('PrintScreen'), 150); return; }
     if (!QP.open) return;
     e.preventDefault(); e.stopPropagation();
     const map = { ArrowUp: BTN.UP, ArrowDown: BTN.DOWN, ArrowLeft: BTN.LEFT, ArrowRight: BTN.RIGHT, Enter: BTN.A, ' ': BTN.A, Escape: BTN.B, Backspace: BTN.B };

@@ -12,10 +12,14 @@
 //   ipv6    true / false                    prefer the game server's IPv6 address
 //   wait    true / false                    a game's page shows the wait for a server (waitT: its text)
 //   mic     true / false                    turn the microphone on when a game starts
+//   up      true / false                    4K upscaler: the stream drawn at the screen's size and sharpened (WebGL)
+//   splash  true / false                    skip Xbox's splash video as a game starts
+//   fb      true / false                    close the "how was it?" questions after a game
+//   anim    true / false                    fewer animations on the dashboard
 (function () {
   if (window.__xcloudStream) return;
   window.__xcloudStream = 1;
-  var C = Object.assign({ res: 'auto', sharpen: 0, clarity: false, contrast: 100, saturation: 100, brightness: 100, stats: false, vib: 100, boost: 100, vol: 100, ipv6: false, wait: true, mic: false, waitT: {} }, window.__xcloudStreamCfg || {});
+  var C = Object.assign({ res: 'auto', sharpen: 0, clarity: false, contrast: 100, saturation: 100, brightness: 100, stats: false, vib: 100, boost: 100, vol: 100, ipv6: false, wait: true, mic: false, up: false, splash: false, fb: false, anim: false, waitT: {} }, window.__xcloudStreamCfg || {});
   function say(m) { try { console.info('[xcloud] ' + m); } catch (e) { /* ignore */ } }
 
   // ---------- resolution: the play request says which kind of device this is ----------
@@ -346,7 +350,7 @@
       if (v && v !== 100) filters.push(f + '(' + Math.min(150, Math.max(50, v)) / 100 + ')');
     });
     if (C.clarity) filters.push('contrast(1.08) saturate(1.12) brightness(1.02)');
-    css.textContent = filters.length ? '#game-stream video { filter: ' + filters.join(' ') + ' !important; }' : '';
+    css.textContent = filters.length ? '#game-stream video, #xcloud-up { filter: ' + filters.join(' ') + ' !important; }' : '';
   }
 
   // ---------- volume boost: the game's sound through a gain of up to 6x ----------
@@ -407,6 +411,147 @@
     if (on) { on.click(); say('microphone on launch: turned on ("' + micLabel(on).slice(0, 40) + '")'); }
     else say('microphone on launch: it already looks on');
   }, 1000);
+
+  // ---------- 4K upscaler (64-bit PCs) ----------
+  // The game's picture (1080p or 1440p: Xbox sends no more) is drawn on a
+  // canvas at the screen's full resolution by the graphics chip, with
+  // contrast-adaptive sharpening (the AMD FidelityFX CAS method), instead of
+  // the browser's plain stretch. Sharper on a 4K screen; uses more of the GPU.
+  var UP_VS = 'attribute vec2 p; varying vec2 uv; void main(){ uv = vec2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5); gl_Position = vec4(p, 0.0, 1.0); }';
+  var UP_FS = [
+    'precision mediump float; uniform sampler2D t; uniform vec2 px; uniform float sharp; varying vec2 uv;',
+    'void main(){',
+    ' vec3 a = texture2D(t, uv + vec2(-px.x, -px.y)).rgb, b = texture2D(t, uv + vec2(0.0, -px.y)).rgb, c = texture2D(t, uv + vec2(px.x, -px.y)).rgb;',
+    ' vec3 d = texture2D(t, uv + vec2(-px.x, 0.0)).rgb, e = texture2D(t, uv).rgb, f = texture2D(t, uv + vec2(px.x, 0.0)).rgb;',
+    ' vec3 g = texture2D(t, uv + vec2(-px.x, px.y)).rgb, h = texture2D(t, uv + vec2(0.0, px.y)).rgb, i = texture2D(t, uv + vec2(px.x, px.y)).rgb;',
+    ' vec3 mn = min(min(min(d, e), min(f, b)), h); mn += min(mn, min(min(a, c), min(g, i)));',
+    ' vec3 mx = max(max(max(d, e), max(f, b)), h); mx += max(mx, max(max(a, c), max(g, i)));',
+    ' vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(0.0001)), 0.0, 1.0));',
+    ' vec3 w = amp * (-1.0 / mix(8.0, 5.0, sharp));',
+    ' gl_FragColor = vec4(clamp((b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w), 0.0, 1.0), 1.0);',
+    '}'].join('\n');
+  var UP = { cv: null, gl: null, prog: null, tex: null, vid: null, failed: false, logged: '' };
+  function upSetup() {
+    var cv = document.createElement('canvas');
+    cv.id = 'xcloud-up';
+    cv.setAttribute('style', 'position:fixed;pointer-events:none;display:none');
+    var gl = cv.getContext('webgl', { alpha: false, antialias: false, depth: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    if (!gl) throw new Error('no WebGL');
+    function sh(type, src) { var x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; }
+    var prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, UP_VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, UP_FS)); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    var buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    var loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(function (q) { gl.texParameteri(gl.TEXTURE_2D, q[0], q[1]); });
+    gl.uniform1f(gl.getUniformLocation(prog, 'sharp'), 0.6);
+    UP.cv = cv; UP.gl = gl; UP.prog = prog; UP.tex = tex;
+  }
+  // where the video's picture is on screen (it keeps its shape: object-fit contain)
+  function picRect(v) {
+    var r = v.getBoundingClientRect(), vw = v.videoWidth, vh = v.videoHeight;
+    if (!vw || !vh || !r.width || !r.height) return null;
+    var k = Math.min(r.width / vw, r.height / vh), w = vw * k, h = vh * k;
+    return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w: w, h: h };
+  }
+  function upDraw() {
+    var v = UP.vid;
+    if (!v || !C.up || !UP.gl) return;
+    try {
+      var rc = picRect(v), gl = UP.gl, cv = UP.cv;
+      if (!rc) return;
+      var dpr = window.devicePixelRatio || 1, W = Math.round(rc.w * dpr), H = Math.round(rc.h * dpr);
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+      cv.style.left = rc.x + 'px'; cv.style.top = rc.y + 'px'; cv.style.width = rc.w + 'px'; cv.style.height = rc.h + 'px';
+      gl.viewport(0, 0, W, H);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, v);
+      gl.uniform2f(gl.getUniformLocation(UP.prog, 'px'), 1 / v.videoWidth, 1 / v.videoHeight);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      if (cv.style.display === 'none') { cv.style.display = 'block'; v.style.opacity = '0'; }
+      var note = v.videoWidth + 'x' + v.videoHeight + ' -> ' + W + 'x' + H;
+      if (note !== UP.logged) { UP.logged = note; say('4K upscaler: ' + note); }
+    } catch (e) { say('4K upscaler stopped: ' + e.message); upOff(); UP.failed = true; }
+  }
+  function upLoop(v) {
+    if (UP.vid !== v) return;
+    upDraw();
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(function () { upLoop(v); });
+    else requestAnimationFrame(function () { upLoop(v); });
+  }
+  function upOff() {
+    if (UP.vid) UP.vid.style.opacity = '';
+    UP.vid = null; UP.logged = '';
+    if (UP.cv) UP.cv.style.display = 'none';
+  }
+  setInterval(function () {
+    var v = document.querySelector('#game-stream video');
+    if (!C.up || !v || UP.failed) { if (UP.vid) upOff(); return; }
+    if (UP.vid === v) return;
+    try { if (!UP.gl) upSetup(); } catch (e) { UP.failed = true; say('4K upscaler not available: ' + e.message); return; }
+    upOff(); UP.vid = v;
+    // right after the game's video, so Xbox's own buttons stay on top of it
+    if (UP.cv.parentNode !== v.parentNode || UP.cv.previousSibling !== v) v.parentNode.insertBefore(UP.cv, v.nextSibling);
+    upLoop(v);
+  }, 500);
+  // (for the app's screenshots: the upscaled picture, when it's on)
+  window.__xcloudUpCanvas = function () { return UP.vid && UP.cv && UP.cv.style.display !== 'none' ? UP.cv : null; };
+
+  // ---------- skip Xbox's splash video ----------
+  // A short video (not the game: that has no file, it's a live stream) that
+  // plays as a game starts is jumped to its end. Logged, so it can be checked.
+  var SPLASHY = /splash|intro|loading|logo|boot|stream/i;
+  document.addEventListener('playing', function (e) {
+    var v = e.target;
+    if (!C.splash || !v || v.tagName !== 'VIDEO' || v.srcObject || !v.currentSrc || v.dataset.xcloudSeen === v.currentSrc) return;
+    v.dataset.xcloudSeen = v.currentSrc;
+    var where = '', el = v;
+    for (var i = 0; i < 5 && el; i++, el = el.parentElement) where += ' ' + (el.id || '') + ' ' + (typeof el.className === 'string' ? el.className : '');
+    var short = isFinite(v.duration) && v.duration > 0 && v.duration <= 12;
+    say('a video started: ' + String(v.currentSrc).slice(0, 100) + ' (' + (isFinite(v.duration) ? Math.round(v.duration) + ' s' : 'live') + ')');
+    if (!short || !(SPLASHY.test(v.currentSrc) || SPLASHY.test(where))) return;
+    try { v.currentTime = Math.max(0, v.duration - 0.05); } catch (x) { /* ignore */ }
+    // (a video that can't jump ahead is stopped and hidden instead)
+    setTimeout(function () { if (v.currentTime < v.duration - 0.5) { try { v.pause(); v.style.visibility = 'hidden'; } catch (x) { /* ignore */ } } }, 300);
+    try { v.dispatchEvent(new Event('ended')); } catch (x) { /* ignore */ }
+    say('skipped the Xbox splash video');
+  }, true);
+
+  // ---------- no "how was it?" after a game ----------
+  // For 20 seconds after a game ends, a box asking to rate the game or the
+  // stream is closed (its Skip / Close button, or Esc).
+  var FB = /feedback|rate|rating|how was|how did|bewert|wie war|évalu|comment était|valora|qué tal|avalia|como foi|valuta|com'è|beoordeel|hoe was|vurd|bedøm|hvordan var|arvio|miten|ocen|jak by|hodnot|jak bylo|értékel|milyen volt|評価|いかが|평가|어땠/i;
+  var FB_SKIP = /skip|close|not now|no thanks|dismiss|cancel|überspring|schließ|nicht jetzt|ignorer|fermer|plus tard|omitir|cerrar|ahora no|pular|fechar|agora não|salta|chiudi|non ora|overslaan|sluiten|niet nu|spring over|luk|ikke nu|ohita|sulje|ei nyt|hopp over|lukk|ikke nå|hoppa över|stäng|inte nu|pomiń|zamknij|nie teraz|přeskoč|zavřít|teď ne|preskoč|zavrieť|teraz nie|kihagy|bezár|most nem|スキップ|閉じる|後で|건너뛰기|닫기|나중에/i;
+  var wasStreaming = false, fbUntil = 0;
+  setInterval(function () {
+    var now = !!document.querySelector('#game-stream video');
+    if (wasStreaming && !now) fbUntil = Date.now() + 20000;
+    wasStreaming = now;
+    if (!C.fb || Date.now() > fbUntil) return;
+    var boxes = document.querySelectorAll('[role=dialog],[aria-modal=true],[role=alertdialog]');
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i], text = (box.textContent || '') + ' ' + (box.getAttribute('aria-label') || '');
+      if (!FB.test(text)) continue;
+      var btn = Array.prototype.filter.call(box.querySelectorAll('button,[role=button],a'), function (b) {
+        return FB_SKIP.test((b.getAttribute('aria-label') || '') + ' ' + (b.textContent || ''));
+      })[0];
+      if (btn) btn.click();
+      else box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+      say('closed the after-game questions (' + (btn ? '"' + ((btn.getAttribute('aria-label') || btn.textContent || '').trim().slice(0, 30)) + '"' : 'Esc') + ')');
+      fbUntil = 0;
+      return;
+    }
+  }, 500);
+
+  // ---------- fewer animations ----------
+  var animCss = null;
+  function anim() {
+    if (!document.documentElement) return;
+    if (!animCss) { animCss = document.createElement('style'); animCss.id = 'xcloud-anim'; document.documentElement.appendChild(animCss); }
+    animCss.textContent = C.anim ? '*,*::before,*::after{transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important}' : '';
+  }
 
   // ---------- stream stats ----------
   var PCs = [];
@@ -474,11 +619,13 @@
   window.__xcloudStreamSet = function (c) {
     Object.assign(C, c || {});
     try { sharpen(); } catch (e) { /* no page yet */ }
+    try { anim(); } catch (e) { /* no page yet */ }
+    if (!C.up && UP.vid) upOff();
     stats();
     try { if (gain) gain.gain.value = gainValue(); boostAudio(); } catch (e) { /* ignore */ }
     if (!C.wait) { waitFor = ''; hidePill(); }
   };
   if (document.documentElement) window.__xcloudStreamSet();
   else document.addEventListener('DOMContentLoaded', function () { window.__xcloudStreamSet(); });
-  say('stream options: resolution ' + C.res + ', sharpening ' + C.sharpen + ', clarity ' + (C.clarity ? 'on' : 'off') + ', picture ' + C.contrast + '/' + C.saturation + '/' + C.brightness + '%' + ', stats ' + (C.stats ? 'on' : 'off') + ', vibration ' + C.vib + '%' + ', volume boost ' + C.boost + '%' + ', prefer IPv6 ' + (C.ipv6 ? 'on' : 'off') + ', microphone on launch ' + (C.mic ? 'on' : 'off') + ', wait time ' + (C.wait ? 'on' : 'off'));
+  say('stream options: resolution ' + C.res + ', sharpening ' + C.sharpen + ', clarity ' + (C.clarity ? 'on' : 'off') + ', picture ' + C.contrast + '/' + C.saturation + '/' + C.brightness + '%' + ', stats ' + (C.stats ? 'on' : 'off') + ', vibration ' + C.vib + '%' + ', volume boost ' + C.boost + '%' + ', prefer IPv6 ' + (C.ipv6 ? 'on' : 'off') + ', microphone on launch ' + (C.mic ? 'on' : 'off') + ', wait time ' + (C.wait ? 'on' : 'off') + ', 4K upscaler ' + (C.up ? 'on' : 'off') + ', skip splash ' + (C.splash ? 'on' : 'off') + ', after-game questions ' + (C.fb ? 'off' : 'on') + ', fewer animations ' + (C.anim ? 'on' : 'off'));
 })();

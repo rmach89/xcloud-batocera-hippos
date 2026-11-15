@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.5 (November 2026)
+Version 1.2.6 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -105,6 +105,11 @@ the right with the sound (Volume, Game volume boost) and the picture
 Up / down choose, left / right change, A puts one back to its default,
 B (or the same buttons, F9, Esc) closes. Changes show at once and are
 saved when it closes. The game doesn't get the controller while it's up.
+Its first row, Take a screenshot (A), saves the game's picture as it
+looks, with the picture settings (and the 4K upscaling, when it's on), as
+a PNG in /userdata/screenshots. PrintScreen on a keyboard does the same.
+The first few times a game starts, a hint at the bottom shows how to open
+quick settings.
 
 A whole row of games: Xbox's controller navigation skips the row titles
 ("Stream for free with ads >"). Hold View (Share / Select) for 1 second
@@ -172,9 +177,6 @@ The rows are grouped in sections:
   Light up keys when typing  real-keyboard keys light up on screen
   Intro video                every time / once a day / off
   Intro video sound          the intro's volume, or mute
-  Disable social features    friends, messages and suggested people
-                             aren't loaded, so the dashboard loads
-                             faster. Applies after Reload dashboard
 
   STREAM
   Stream resolution          720p (standard, about 10 Mbps internet,
@@ -203,13 +205,18 @@ The rows are grouped in sections:
   Stream stats               a small box at the top while you play:
                              resolution, frame rate, ping, bitrate,
                              packet loss and decode time
-  Wait time on game pages    a game's page shows how long you'd wait for
-                             a server (on by default)
 
   PICTURE
   Sharpening                 off / low / medium / high. Sharpens the
                              game's picture; uses more processing power,
                              so lower it if games stutter
+  4K upscaling               64-bit PCs only. Draws the game at the
+                             screen's full resolution on the graphics
+                             chip and sharpens it (contrast-adaptive
+                             sharpening), for 4K TVs. Xbox itself sends
+                             at most 1440p, so this makes it sharper,
+                             not real 4K. Uses more of the GPU: turn it
+                             off if games stutter
   Clarity boost              a little more contrast and colour, in one
                              switch (works together with the sliders)
   Contrast, Colour           fine-tune the game's picture, 50-150%.
@@ -224,6 +231,21 @@ The rows are grouped in sections:
                              D-pad, A B X Y, bumpers, triggers, View,
                              Menu, L3 and R3. Xbox sees it as one more
                              Xbox controller from the first touch
+
+  XBOX DASHBOARD
+  Disable social features    friends, messages and suggested people
+                             aren't loaded, so the dashboard loads
+                             faster. Applies after Reload dashboard
+  Wait time on game pages    a game's page shows how long you'd wait for
+                             a server (on by default)
+  Skip Xbox splash video     skips the short Xbox video as a game starts
+                             (about 3 seconds sooner)
+  Turn off post-game         closes the questions about the game or the
+  feedback                   stream after you stop playing
+  Reduce animations          fewer moving effects on the dashboard;
+                             smoother on slower devices like ARM boards
+  Turn off analytics         Xbox's usage statistics and error reports
+                             aren't sent
 
   EMULATIONSTATION
   EmulationStation game list off / all cloud games / free with ads /
@@ -456,14 +478,22 @@ Settings > Save logs for help puts them in one zip for sending.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
-What's new in 1.2.5
+What's new in 1.2.6
 -------------------
 - Quick settings in a game: hold LB + RB + View for a second (F9 on a
-  keyboard) for the sound and picture settings over the game.
+  keyboard) for the sound and picture settings over the game, and a
+  screenshot button (PrintScreen on a keyboard). A hint shows how to
+  open it the first few times a game starts.
+- 4K upscaling (64-bit PCs), Skip Xbox splash video, Turn off post-game
+  feedback, Reduce animations and Turn off analytics. Settings has a
+  new Xbox dashboard section for the options about the Xbox site.
 - New in Settings, like Better xCloud: Game volume boost (up to 600%),
   Region unlock without a VPN, Disable social features, Prefer IPv6
   server, Microphone on game launch, Wait time on game pages and an
   on-screen touch controller (see Settings).
+
+What's new in 1.2.5
+-------------------
 - install.sh works on its own: with nothing else next to it, it
   downloads the newest release from GitHub into /userdata/Xbox Cloud
   Gaming and installs that (see Install and update). With the zip it
