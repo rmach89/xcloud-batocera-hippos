@@ -187,6 +187,8 @@ function settingsKey(key) {
 }
 function settingsPress(b) {
   const keys = { [BTN.UP]: 'ArrowUp', [BTN.DOWN]: 'ArrowDown', [BTN.LEFT]: 'ArrowLeft', [BTN.RIGHT]: 'ArrowRight', [BTN.A]: 'Enter', [BTN.B]: 'Escape' };
+  // Settings: LB / RB jump between its sections, Y resets one
+  if (ON_SETTINGS) Object.assign(keys, { 4: 'PageUp', 5: 'PageDown', [BTN.Y]: 'y' });
   if (keys[b]) settingsKey(keys[b]);
 }
 if (ON_SETTINGS) {
@@ -655,7 +657,7 @@ const QP_CSS = `
   #xcloud-qp .hint{margin-top:18px;font-size:15px;color:#9a9a9a}`;
 function qpStreaming() { return !!document.querySelector('#game-stream video'); }
 function qpText(r) {
-  if (r.action) return TXT.qpShotGo || 'A';
+  if (r.action) return (r.k === 'replay' ? TXT.qpSaveGo : TXT.qpShotGo) || 'A';
   const v = QP.v[r.k];
   if (r.k === 'volume' && QP.v.muted) return TXT.muted || 'Muted';
   if (r.toggle) return v ? TXT.on : TXT.off;
@@ -1730,8 +1732,19 @@ function onRelease(b) {
 // a controller (re)appears, what's held then is "already held", not a press.
 let firstTick = true, lastPadCount = 0;
 const pageOpened = Date.now();
+// Safe mode: LB + RB (without View, the quick settings combo) held for 2
+// seconds while the app is opening; the app decides whether it's early enough
+let safeSince = 0, safeSent = false;
+function safeCheck(s) {
+  if (safeSent) return;
+  if (s[4] && s[5] && !s[BTN.VIEW] && !(ON_DASH && qpStreaming())) {
+    if (!safeSince) safeSince = Date.now();
+    else if (Date.now() - safeSince >= 2000) { safeSent = true; ipcRenderer.send('xcloud-safe'); }
+  } else safeSince = 0;
+}
 function tick() {
   const s = readPads();
+  if (Date.now() - pageOpened < 45000) safeCheck(s);
   const appeared = padCount > lastPadCount;
   lastPadCount = padCount;
   if (firstTick || (appeared && Date.now() - pageOpened < 400)) {

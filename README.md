@@ -6,12 +6,22 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 
 > **Unofficial project, use at your own risk.** Not affiliated with, endorsed by or sponsored by Microsoft or Xbox. Xbox, Xbox Cloud Gaming and Xbox Game Pass are trademarks of the Microsoft group of companies.
 
+| Settings | Quick settings in a game |
+|---|---|
+| ![The Settings screen](docs/images/settings.png) | ![Quick settings open over a game](docs/images/quick-settings.png) |
+
+<sub>The game behind quick settings is a drawn stand-in, not a real game.</sub>
+
+What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+
 ## Features
 
 **The app**
 - A fullscreen Xbox Cloud Gaming app that works entirely with a controller. It has an on-screen keyboard for signing in and searching, and a number pad for codes.
 - It only goes to Microsoft's own sites (Xbox, sign-in, the Microsoft Store and your account). Every other link, popup and download is blocked.
-- **Profiles**: each person gets their own Xbox sign-in and settings. A PIN keeps children's and teens' profiles out of the adults' accounts.
+- **Profiles**: each person gets their own Xbox sign-in and all of their own settings. A PIN keeps children's and teens' profiles out of the adults' accounts.
+- **Back up and restore** the settings and profiles (not the sign-ins) as one file in the share folder, for a new device or after reinstalling.
+- **Safe mode**: if the picture ever goes black or breaks up, hold LB + RB while the app opens; the graphics options turn off so you can start again from there.
 - The app's own screens are in 18 languages and follow the system's language by default.
 
 **Stream options** (Settings, saved per profile)
@@ -26,6 +36,7 @@ Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](http
 - **Quick settings in a game** (hold LB + RB + View, or F9): sound and picture over the game, stream stats, **screenshots** with the picture settings in them (saved to `/userdata/screenshots`), and **instant replay**: the last 30 seconds as a video in `/userdata/recordings`.
 - Games started from the dashboard count in EmulationStation's **play count, last played and play time**.
 - **Skip the Xbox splash video**, **turn off post-game feedback**, **reduce animations** and **turn off analytics** for slower devices.
+- **Low-power settings** in one press for slower devices, offered once the first time the app opens on an ARM device.
 
 **EmulationStation game list** (optional)
 - **All cloud games** (about 570), **Free with ads** (the games anyone can play free with ads, no Game Pass needed), **Games I pick** (add a game with F8 or LB + RB + LT + RT), or **Off** (just the app itself).
@@ -95,23 +106,26 @@ bash /tmp/xcloud-install.sh
 | Open a whole row (its title) on the dashboard | hold View on a game in it (1 s) | hold Share/Create | — |
 | Quick settings in a game (sound and picture) | hold LB + RB + View (1 s) | hold L1 + R1 + Share/Create | F9 |
 | Screenshot in a game | Quick settings → Take a screenshot | the same | PrintScreen |
+| Settings: previous / next section | LB / RB | L1 / R1 | Page Up / Page Down |
+| Settings: reset the section you're in | Y twice | △ twice | Y twice |
+| Safe mode (graphics options off) | hold LB + RB while the app opens (2 s) | hold L1 + R1 | `Run-App.sh --safe` |
 
 The first few times you move onto a row with the controller, a hint at the bottom shows how to open it ("Hold View to open Stream for free with ads").
 
-In Settings: up and down to move, left and right to change, A to select, Menu to save, B to cancel. The app's own screens show your controller's buttons: A B X Y on Xbox, ✕ ○ □ △ on PlayStation.
+In Settings: up and down to move, left and right to change, A to select, Menu to save, B to cancel. A reset only changes the screen; Save keeps it and Cancel undoes it. Region and Language aren't reset. The app's own screens show your controller's buttons: A B X Y on Xbox, ✕ ○ □ △ on PlayStation.
 
 ## Settings
 
 | Section | What's in it |
 |---|---|
 | Profile and account | Change user, sign out of Xbox, sign out when closing |
-| General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound |
+| General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound, low-power settings |
 | Stream | Resolution, connection check, stream as a Windows PC, GPU acceleration, prefer IPv6 server, keep stream quality steady, reconnect automatically, stay connected, microphone on game launch, instant replay, stream stats (with 60-second graphs) |
 | Picture | Sharpening, 4K upscaling with its size and sharpness (64-bit PCs), video clean-up, Clarity boost, contrast, colour saturation, brightness, picture settings per game |
 | Controller | The full list of controls, vibration strength, on-screen touch controller, controller battery, split screen (2-4 players), remember split-screen players |
 | Xbox dashboard | Disable social features, wait time on game pages, skip Xbox splash video, turn off post-game feedback, reduce animations, turn off analytics |
 | EmulationStation | The game list (Off / All cloud games / Free with ads / Games I pick), 3D game boxes |
-| Help and maintenance | Reload dashboard, clear cache, save logs for help, updates |
+| Help and maintenance | Reload dashboard, clear cache, save logs for help, back up settings, restore settings, updates |
 
 ## Profiles and PIN
 
@@ -153,6 +167,35 @@ bash /userdata/system/add-ons/xcloud/uninstall.sh
 
 It asks before removing anything, and can keep everyone's sign-ins and profiles for a reinstall. When it's done, press Enter to exit; EmulationStation reloads by itself. To remove everything without questions, add `--all`. From BUA, its questions appear on BUA's screen; if a child's profile needs the PIN, use the F1 shortcut instead, since BUA can't take typed answers.
 
+## FAQ
+
+**Is this an official Xbox app?**
+No. It's a fan-made add-on that opens Microsoft's own Xbox Cloud Gaming website (play.xbox.com) in a fullscreen window made for controllers. You sign in with your own Microsoft account.
+
+**Do I need Game Pass?**
+For most games, yes: a Game Pass plan that includes cloud gaming. The **Free with ads** games play without Game Pass.
+
+**Why is the picture 1080p at most (1440p with Ultimate)? Can it do 4K?**
+That's what Xbox sends to browsers. **4K upscaling** (64-bit PCs) draws the stream at your TV's full resolution and sharpens it on the graphics chip. It's sharper, but not real 4K.
+
+**What's the difference between Region and Region unlock?**
+**Region** only picks which version of the Xbox site you get (its language, store, prices and game list); Xbox still sees where you really are. **Region unlock** tells Xbox you're in another country, for places where Xbox Cloud Gaming isn't offered. Your games then run on that country's servers, so the further away it is, the higher the ping. Leave it off if Xbox Cloud Gaming works where you are. It carries the same risk as a VPN.
+
+**The picture is black, flickers or breaks up.**
+Hold **LB + RB** for two seconds while the app opens (safe mode). It turns off GPU acceleration, 4K upscaling, video clean-up, sharpening and the picture adjustments. Then turn things back on one at a time in Settings to find the one your device doesn't like.
+
+**Games stutter on my ARM board.**
+Try Settings → General → **Low-power settings**, a lower **Stream resolution**, and **Connection check** to see what your internet can carry. Wired or 5 GHz Wi-Fi helps the most.
+
+**Does each person keep their own settings?**
+Yes. With profiles set up, every setting belongs to the profile, except GPU acceleration, split screen, the EmulationStation game list and the controller layout, which are for the whole machine.
+
+**Can I move my setup to another device?**
+Settings → Help and maintenance → **Back up settings** saves one file in the share folder. Copy it to the other device's share folder and use **Restore settings** there. Sign-ins aren't in the backup, so each profile signs in to Xbox once on the new device.
+
+**Will an update lose my sign-ins or settings?**
+No. Updating from Settings or running the installer again keeps sign-ins, profiles, settings and picked games.
+
 ## Help
 
 - **Logs** are in `/userdata/system/logs/`:
@@ -162,7 +205,7 @@ It asks before removing anything, and can keep everyone's sign-ins and profiles 
   - `xcloud-update.log`: updates installed from Settings
 - **Settings → Save logs for help** puts the logs and your settings into one zip in the share folder, ready to send. Gamertags are replaced, and nothing about sign-ins is included.
 - **Full documentation:** `README.txt` in the download covers every setting, the game list, profiles and troubleshooting.
-- **Problems and suggestions:** open an [issue](https://github.com/rmach89/xcloud-batocera-hippos/issues).
+- **Problems and suggestions:** open an [issue](https://github.com/rmach89/xcloud-batocera-hippos/issues/new/choose). The bug report form asks for the "Save logs for help" zip, which is usually all that's needed to find the cause.
 
 ## Credits
 

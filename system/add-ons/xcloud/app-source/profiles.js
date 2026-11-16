@@ -18,7 +18,11 @@ const crypto = require('crypto');
 // the Settings choices that belong to each profile (everything else in
 // config.json is shared by the whole machine)
 const PROFILE_KEYS = ['start_url', 'language', 'volume', 'muted', 'keyboard_highlight', 'play_intro',
-  'intro_volume', 'intro_muted', 'stream_as_windows', 'stream_resolution', 'video_sharpen', 'clarity_boost', 'video_contrast', 'video_saturation', 'video_brightness', 'stream_stats', 'vibration', 'sign_out_on_exit'];
+  'intro_volume', 'intro_muted', 'stream_as_windows', 'stream_resolution', 'video_sharpen', 'clarity_boost', 'video_contrast', 'video_saturation', 'video_brightness', 'stream_stats', 'vibration', 'sign_out_on_exit',
+  'region_unlock', 'audio_boost', 'prefer_ipv6', 'wait_time', 'mic_on_launch', 'touch_controller', 'no_social', 'upscale_4k', 'skip_splash', 'no_feedback',
+  'reduce_anim', 'no_analytics', 'upscale_target', 'upscale_sharp', 'video_cleanup', 'stream_steady', 'picture_per_game', 'replay', 'keep_alive', 'auto_reconnect'];
+// (GPU acceleration, split screen, the EmulationStation game list and the controller layout fix
+// are the machine's: config.json)
 const COLORS = ['#107c10', '#0e6aa8', '#a4262c', '#8764b8', '#ca5010', '#038387', '#c239b3', '#498205'];
 
 function create(home, log) {

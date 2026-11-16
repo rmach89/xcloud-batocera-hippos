@@ -1,0 +1,77 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. The quickest way to get it fixed is the logs:
+        in the app, open **Settings → Help and maintenance → Save logs for help**.
+        It saves `xcloud-logs-<date>-<time>.zip` in the share folder (`/userdata`).
+        Gamertags are replaced and nothing about sign-ins is included, so it's safe to attach.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: "I pressed A on a game in EmulationStation's list and the app opened on the dashboard instead of the game."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1. Open Settings
+        2. Turn on ...
+        3. Start a game
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → Help and maintenance → Updates shows it.
+      placeholder: "1.2.8"
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Batocera
+        - HippOS
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: sysver
+    attributes:
+      label: System version
+      placeholder: "Batocera v42"
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: The PC, handheld or board it runs on.
+      placeholder: "Steam Deck OLED / mini PC with a Ryzen 5 / Raspberry Pi 5"
+  - type: input
+    id: controller
+    attributes:
+      label: Controller
+      placeholder: "Xbox Series controller over Bluetooth"
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it was installed
+      options:
+        - BUA
+        - HippOS content downloader
+        - The zip from Releases
+        - install.sh on its own
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Drag the `xcloud-logs-....zip` from "Save logs for help" here. If the app won't open at all, attach `/userdata/system/logs/xcloud.log` instead.
+    validations:
+      required: true

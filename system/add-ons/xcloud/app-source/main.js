@@ -107,7 +107,7 @@ const BOOST = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600];
 const UNLOCK = { au: '203.41.44.20', br: '200.221.11.101', eu: '194.25.0.68', jp: '122.1.0.154', kr: '203.253.64.1', us: '4.2.2.2' };
 const UNLOCK_CODES = ['off'].concat(Object.keys(UNLOCK));
 // the 4K upscaler is for 64-bit PCs (x86-64) only
-const X64 = process.arch === 'x64';
+const X64 = (process.env.XCLOUD_ARCH || process.arch) === 'x64';   // (XCLOUD_ARCH: for the tests)
 const UP_TARGETS = ['screen', '1080', '1440', '2160'];
 const SPLITS = [0, 2, 3, 4];
 // the picture settings a game can have of its own (Picture settings per game)
@@ -281,7 +281,13 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // optional (Settings > GPU acceleration): ask Chromium to use the graphics
 // chip even where it normally wouldn't, including decoding the game's video
 // (VA-API). Read once at start, so a change applies the next time the app opens.
+// Safe mode (--safe, or LB + RB held as the app opens): GPU acceleration and split
+// screen off before the engine starts; the rest is turned off once it's running
+const SAFE_ARG = process.argv.includes('--safe');
+if (SAFE_ARG) { cfg.gpu_acceleration = false; cfg.split_players = 0; }
 const GPU_AT_START = cfg.gpu_acceleration;
+const SPLIT_AT_START = cfg.split_players;
+const APP_START = Date.now();
 if (GPU_AT_START) {
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
   app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -718,6 +724,8 @@ function settingsHtml() {
     'unlockT', 'unlockHelp', 'unlockEu', 'boostT', 'boostHelp', 'socialT', 'socialHelp', 'ipv6T', 'ipv6Help', 'micT', 'micHelp', 'waitT', 'waitHelp', 'touchT', 'touchHelp',
     'secDash', 'upT', 'upHelp', 'utT', 'utHelp', 'utScreen', 'usT', 'usHelp', 'cleanT', 'cleanHelp', 'steadyT', 'steadyHelp', 'pgT', 'pgHelp', 'splitT', 'splitHelp', 'splitN', 'remT', 'remHelp', 'replayT', 'replayHelp', 'aliveT', 'aliveHelp', 'reconT', 'reconHelp',
     'netT', 'netHelp', 'netBtn', 'netBusy', 'netResult', 'netFail', 'battT', 'battHelp', 'battNone', 'splashT', 'splashHelp', 'fbT', 'fbHelp', 'animT', 'animHelp', 'anaT', 'anaHelp',
+    'sHintSec', 'resetQ', 'resetDone', 'resetNone', 'lowT', 'lowHelp', 'lowBtn', 'lowDone',
+    'bkT', 'bkHelp', 'bkBtn', 'bkBusy', 'bkDone', 'bkFail', 'rsT', 'rsHelp', 'rsNone', 'rsBtn', 'rsConfirm', 'rsBusy', 'rsDone', 'rsFail',
     'c1a', 'c1b', 'c2a', 'c2b', 'c3a', 'c3b', 'c4a', 'c4b', 'c5a', 'c5b', 'c6a', 'c6b', 'c7a', 'c7b', 'c8a', 'c8b', 'c9a', 'c9b', 'c10a', 'c10b', 'c11a', 'c11b'];
   const T = {};
   for (const [code] of i18n.LANGS) {
@@ -741,7 +749,8 @@ function settingsHtml() {
     glist: cfg.game_list, g3d: !!cfg.game_list_3d, glCount: glState().mode === cfg.game_list ? (glState().count || 0) : 0, glBusy: !!glRun, glPct,
     game: pageGame(), gpicked: !!(pageGame() && pickedGames().some(g => g.id === pageGame().id)),
     reload: !SETTINGS_MODE,  // Reload dashboard only when the dashboard is open (not from the F1 shortcut)
-    user: curProfile ? profileName(curProfile) : ''
+    user: curProfile ? profileName(curProfile) : '',
+    backup: newestBackup()
   };
   const ICON_RELOAD = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
   const ICON_PAD = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 6h9a5.5 5.5 0 0 1 5.3 7l-1.2 4.3a2.4 2.4 0 0 1-4.1 1L14.3 16H9.7l-2.2 2.3a2.4 2.4 0 0 1-4.1-1L2.2 13A5.5 5.5 0 0 1 7.5 6zM7 9v1.5H5.5v2H7V14h2v-1.5h1.5v-2H9V9H7zm8.5.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm2 2.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg>';
@@ -749,6 +758,9 @@ function settingsHtml() {
   const ICON_LOGS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V9h5.5L13 3.5zM7 12v2h10v-2H7zm0 4v2h7v-2H7z"/></svg>';
   const ICON_CACHE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zM6 8h12l-1 13H7L6 8zm4 3v7h1.5v-7H10zm2.5 0v7H14v-7h-1.5z"/></svg>';
   const ICON_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c4 0 7 2 7 4.5V20H2v-1.5C2 16 5 14 9 14zm8.5-9.5a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4zM18 13c3 .3 5 1.9 5 4V19h-5v-.5c0-2-1-3.6-2.6-4.6.8-.6 1.6-.9 2.6-.9z"/></svg>';
+  const ICON_LOW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17 4c-6 0-11 3-12 9-.3 1.7 0 3.4.6 4.9L3 20.5 4.5 22l2.6-2.6c1.5.6 3.2.9 4.9.6 6-1 9-6 9-12V4h-4zm-4.6 10.6-1.4-1.4 4.6-4.6 1.4 1.4-4.6 4.6z"/></svg>';
+  const ICON_BACKUP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 10A7.5 7.5 0 0 0 5.3 8.1 6 6 0 0 0 6 20h13a5 5 0 0 0 .4-10zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>';
+  const ICON_RESTORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8H12z"/></svg>';
   const ICON_SIGNOUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 17l1.4-1.4L8.8 13H20v-2H8.8l2.6-2.6L10 7l-5 5 5 5zM4 21h8v-2H4V5h8V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z"/></svg>';
   return `<!doctype html>
 <html lang="${L}"><head><meta charset="utf-8"><title>Xbox Cloud Gaming Settings</title>
@@ -867,6 +879,10 @@ function settingsHtml() {
     <div><div class="label" data-k="introSound"></div><div class="help" data-k="introSoundHelp"></div></div>
     <div class="picker"><span class="arrow" id="idown">&minus;</span><span class="bar" style="width:200px"><i id="ibar"></i></span><span class="arrow" id="iup">+</span><span class="pct" id="ipct" style="min-width:96px"></span>
     <span class="toggle" id="imute" style="margin-left:6px"></span></div>
+  </div>
+  <div class="row" id="row-low">
+    <div><div class="label" data-k="lowT"></div><div class="help" id="low-help"></div></div>
+    <span class="chip">${ICON_LOW} <span data-k="lowBtn"></span></span>
   </div>
   <div class="sec" data-k="secStream"></div>
   <div class="row" id="row-res">
@@ -1031,6 +1047,14 @@ function settingsHtml() {
     <div><div class="label" data-k="logsT"></div><div class="help" id="logs-help"></div></div>
     <span class="chip">${ICON_LOGS} <span id="logs"></span></span>
   </div>
+  <div class="row" id="row-backup">
+    <div><div class="label" data-k="bkT"></div><div class="help" id="bk-help"></div></div>
+    <span class="chip" id="bk-chip">${ICON_BACKUP} <span id="bk"></span></span>
+  </div>
+  <div class="row" id="row-restore">
+    <div><div class="label" data-k="rsT"></div><div class="help" id="rs-help"></div></div>
+    <span class="chip" id="rs-chip">${ICON_RESTORE} <span id="rs"></span></span>
+  </div>
   <div class="row" id="row-update">
     <div><div class="label" data-k="updT"></div><div class="help" id="upd-help"></div></div>
     <span class="chip" id="upd-chip">${ICON_UPDATE} <span id="upd"></span></span>
@@ -1064,13 +1088,13 @@ function settingsHtml() {
   function buildRows() {
     // the same order as on screen, section by section
     rows = (S.reload ? ['row-user'] : []).concat(['row-signout', 'row-soe'])
-      .concat(['row-region', 'row-unlock', 'row-language', 'row-volume', 'row-boost', 'row-highlight', 'row-intro', 'row-isound'])
+      .concat(['row-region', 'row-unlock', 'row-language', 'row-volume', 'row-boost', 'row-highlight', 'row-intro', 'row-isound', 'row-low'])
       .concat(['row-res', 'row-net', 'row-windows', 'row-gpu', 'row-ipv6', 'row-mic', 'row-steady', 'row-recon', 'row-alive', 'row-replay', 'row-stats'])
       .concat(['row-sharpen'].concat(S.x64 ? ['row-up'].concat(S.up ? ['row-ut', 'row-us'] : []) : []).concat(['row-clean', 'row-clarity', 'row-ct', 'row-sa', 'row-br', 'row-pg']))
       .concat(['row-controls', 'row-vib', 'row-touch', 'row-batt', 'row-split'].concat(S.split ? ['row-rem'] : []))
       .concat(['row-social', 'row-wait', 'row-splash', 'row-fb', 'row-anim', 'row-ana'])
       .concat(['row-glist'].concat(S.game && GL[gi] === 'picked' ? ['row-gpick'] : []).concat(GL[gi] !== 'off' ? ['row-g3d'] : []))
-      .concat(S.reload ? ['row-reload'] : []).concat(['row-cache', 'row-logs', 'row-update', 'buttons']);
+      .concat(S.reload ? ['row-reload'] : []).concat(['row-cache', 'row-logs', 'row-backup', 'row-restore', 'row-update', 'buttons']);
     LAST = rows.length - 1;
     ['row-gpick', 'row-g3d', 'row-ut', 'row-us', 'row-rem'].forEach(function (id) { document.getElementById(id).style.display = rows.indexOf(id) >= 0 ? 'flex' : 'none'; });
   }
@@ -1222,7 +1246,18 @@ function settingsHtml() {
     $('vibpct').textContent = S.vib ? S.vib + '%' : tx('off');
     $('signout').textContent = confirming() ? tx('signOutConfirm') : tx('signOutBtn');
     $('signout-chip').className = 'chip' + (confirming() ? ' warn' : '');
-    $('hint').textContent = tx('sHint') + (S.reload ? tx('sHintR') : '');
+    var noting = Date.now() < noteUntil;
+    $('hint').textContent = noting ? note : tx('sHint') + (S.reload ? tx('sHintR') : '') + tx('sHintSec');
+    $('hint').style.color = noting ? '#7fd65a' : '';
+    $('low-help').textContent = S.lowDone ? tx('lowDone') : tx('lowHelp');
+    $('bk').textContent = S.bk === 'busy' ? tx('bkBusy') : S.bk === 'done' ? '\u2713' : tx('bkBtn');
+    $('bk-help').textContent = S.bk === 'done' && S.backup ? tx('bkDone', { file: S.backup.f }) : S.bk === 'fail' ? tx('bkFail') : tx('bkHelp');
+    var rsAsk = Date.now() < rsUntil;
+    $('rs').textContent = S.rs === 'busy' ? tx('rsBusy') : S.rs === 'done' ? '\u2713' : rsAsk ? tx('rsConfirm') : tx('rsBtn');
+    $('rs-chip').className = 'chip' + (rsAsk && !S.rs ? ' warn' : '');
+    var when = '';
+    try { when = S.backup ? new Date(S.backup.t).toLocaleString(ui(), { dateStyle: 'medium', timeStyle: 'short' }) : ''; } catch (e) { when = S.backup ? new Date(S.backup.t).toLocaleString() : ''; }
+    $('rs-help').textContent = S.rs === 'done' ? tx('rsDone') : S.rs === 'fail' ? tx('rsFail') : S.backup ? tx('rsHelp', { file: S.backup.f, date: when }) : tx('rsNone');
     rows.forEach(function (id, i) { if (id !== 'buttons') $(id).className = 'row' + (i === row ? ' on' : ''); });
     $('save').className = 'save' + (row === LAST && btn === 0 ? ' on' : '');
     $('cancel').className = 'cancel' + (row === LAST && btn === 1 ? ' on' : '');
@@ -1230,8 +1265,8 @@ function settingsHtml() {
       try {
         // the first row of a section brings its heading into view too
         var el = $(cur()), prev = el.previousElementSibling;
-        if (prev && prev.className === 'sec') prev.scrollIntoView({ block: 'nearest' });
         el.scrollIntoView({ block: 'nearest' });
+        if (prev && prev.className === 'sec') prev.scrollIntoView({ block: 'nearest' });
       } catch (e) {}
     }
   }
@@ -1240,6 +1275,68 @@ function settingsHtml() {
     sent = true; setTimeout(function () { sent = false; }, 3000);
     location.href = '${ACTION_PREFIX}' + path;
   }
+  // ---- sections: LB / RB (Page Up / Down) jump between them, Y resets one ----
+  function secOf(id) {
+    if (id === 'buttons') return 'buttons';
+    var e = $(id);
+    while (e && e.className !== 'sec') e = e.previousElementSibling;
+    return e ? e.getAttribute('data-k') : '';
+  }
+  function firstOf(s) { for (var i = 0; i < rows.length; i++) if (secOf(rows[i]) === s) return i; return 0; }
+  function jump(dir) {
+    var s = secOf(cur());
+    if (dir > 0) {
+      for (var i = row + 1; i < rows.length; i++) if (secOf(rows[i]) !== s) { row = i; break; }
+    } else {
+      var f = firstOf(s);
+      if (f !== row) row = f;
+      else if (row > 0) row = firstOf(secOf(rows[row - 1]));
+    }
+    render();
+  }
+  var note = '', noteUntil = 0, noteTimer = null, resetAsk = '', resetUntil = 0, rsUntil = 0;
+  function say(t) { note = t; noteUntil = Date.now() + 4000; clearTimeout(noteTimer); noteTimer = setTimeout(render, 4100); }
+  // each section's choices back to how the app comes (Region and Language stay as they are)
+  var RESET = {
+    secAcct: function () { S.soe = false; },
+    secGen: function () { ui_ = 0; S.volume = 100; S.vmute = false; S.boost = 100; S.highlight = true; ii = 0; S.ivol = 100; S.imute = false; },
+    secStream: function () { rsi = 0; S.windows = false; S.gpu = false; S.ipv6 = false; S.mic = false; S.steady = false; S.recon = true; S.alive = false; S.replay = false; S.stats = false; },
+    secPic: function () { shi = 0; S.up = false; S.ut = 'screen'; S.us = 60; S.clean = false; S.clarity = false; S.pic = { ct: 100, sa: 100, br: 100 }; S.pg = false; },
+    secPad: function () { S.vib = 100; S.touch = false; S.split = 0; S.rem = false; },
+    secDash: function () { S.social = false; S.wait = true; S.splash = false; S.fb = false; S.anim = false; S.ana = false; }
+  };
+  function resetSection() {
+    var s = secOf(cur());
+    if (!RESET[s]) { say(tx('resetNone')); render(); return; }
+    if (resetAsk === s && Date.now() < resetUntil) {
+      resetAsk = '';
+      RESET[s]();
+      buildRows(); row = firstOf(s);
+      say(tx('resetDone', { sec: tx(s) })); render();
+      return;
+    }
+    resetAsk = s; resetUntil = Date.now() + 4000;
+    say(tx('resetQ', { sec: tx(s) })); render();
+  }
+  // Low-power settings: the lighter choices for slower devices (Save keeps them)
+  function lowPower() {
+    shi = 0; S.clarity = false; S.up = false; S.clean = false; S.replay = false; S.anim = true; S.ana = true; S.social = true;
+    S.lowDone = true; buildRows(); row = rows.indexOf('row-low'); render();
+  }
+  // Back up: the settings, profiles (no sign-ins) and picked games in one file in the share folder
+  function backup() {
+    if (S.bk === 'busy') return;
+    S.bk = 'busy'; render();
+    location.href = '${ACTION_PREFIX}settings-backup';
+  }
+  window.__backupStatus = function (r) { S.bk = r && r.f ? 'done' : 'fail'; if (r && r.f) S.backup = r; render(); };
+  // Restore: the newest backup in the share folder (A twice); the app closes afterwards
+  function restore() {
+    if (!S.backup || S.rs === 'busy' || S.rs === 'done') { render(); return; }
+    if (Date.now() < rsUntil) { S.rs = 'busy'; render(); go('settings-restore?f=' + encodeURIComponent(S.backup.f)); return; }
+    rsUntil = Date.now() + 4000; setTimeout(render, 4100); render();
+  }
+  window.__restoreStatus = function (ok) { S.rs = ok ? 'done' : 'fail'; sent = false; render(); };
   function save() {
     go('settings-save?region=' + encodeURIComponent(regions[ri]) + '&lang=' + encodeURIComponent(S.langs[li][0]) +
        '&volume=' + S.volume + '&highlight=' + (S.highlight ? 1 : 0) + '&intro=' + INTRO[ii] + '&windows=' + (S.windows ? 1 : 0) +
@@ -1360,6 +1457,9 @@ function settingsHtml() {
     if (r === 'row-logs') { saveLogs(); return; }
     if (r === 'row-update') { update(); return; }
     if (r === 'row-net') { netTest(); return; }
+    if (r === 'row-low') { lowPower(); return; }
+    if (r === 'row-backup') { backup(); return; }
+    if (r === 'row-restore') { restore(); return; }
     if (r === 'row-isound') { S.imute = !S.imute; render(); return; }   // A / Enter: mute or unmute
     if (r === 'row-ct' || r === 'row-sa' || r === 'row-br') { S.pic[r.slice(4)] = 100; render(); return; }   // A / Enter: back to 100%
     if (r === 'row-boost') { S.boost = 100; render(); return; }   // A / Enter: no boost
@@ -1383,6 +1483,9 @@ function settingsHtml() {
     else if (k === 'Enter' || k === 'NumpadEnter' || k === ' ' || k === 'x' || k === 'X') { e.preventDefault(); select(); }
     else if (k === 'Escape' || k === 'Backspace') { e.preventDefault(); cancel(); }
     else if (k === 'r' || k === 'R') { e.preventDefault(); reload(); }
+    else if (k === 'PageDown') { e.preventDefault(); jump(1); }   // RB
+    else if (k === 'PageUp') { e.preventDefault(); jump(-1); }    // LB
+    else if (k === 'y' || k === 'Y') { e.preventDefault(); resetSection(); }
     else if (k === 'F10' || k === 's' || k === 'S') { e.preventDefault(); save(); } // F10 = the controller's Menu button (sent by the app)
   });
   // mouse
@@ -1420,6 +1523,9 @@ function settingsHtml() {
   $('row-controls').addEventListener('click', function () { row = rowOf('row-controls'); openControls(); });
   $('row-update').addEventListener('click', function () { row = rowOf('row-update'); render(); update(); });
   $('row-net').addEventListener('click', function () { row = rowOf('row-net'); render(); netTest(); });
+  $('row-low').addEventListener('click', function () { row = rowOf('row-low'); lowPower(); });
+  $('row-backup').addEventListener('click', function () { row = rowOf('row-backup'); render(); backup(); });
+  $('row-restore').addEventListener('click', function () { row = rowOf('row-restore'); restore(); });
   $('cback').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); closeControls(); });
   $('save').addEventListener('click', function (e) { e.preventDefault(); save(); });
   $('cancel').addEventListener('click', function (e) { e.preventDefault(); cancel(); });
@@ -2052,6 +2158,15 @@ function profileAction(wc, action, q) {
     showPicker(wc, pickerReturn);
     return true;
   }
+  if (action === 'card') {
+    const kind = promptCur && promptCur.kind, a = q.get('a');
+    if (kind === 'lowpower') {
+      try { fs.writeFileSync(LOWPOWER_ASKED, `asked ${new Date().toISOString()}: ${a}\n`); } catch (e) { /* ignore */ }
+      if (a === 'yes') applyLowPower(); else log('low-power settings: "No thanks"');
+    } else log(`"What's new" card closed`);
+    closePrompt();
+    return true;
+  }
   if (action === 'picktip') {
     if (q.get('a') === 'never') {
       try { fs.writeFileSync(PICK_TIP_HIDDEN, `"Games I pick" how-to hidden on ${new Date().toISOString()}. Delete this file to see it again.\n`); } catch (e) { /* ignore */ }
@@ -2379,6 +2494,10 @@ function qpSave() {
     try { fs.writeFileSync(GAME_PIC, JSON.stringify(all, null, 2) + '\n'); log(`picture settings saved for this game (${g})`); } catch (e) { log(`couldn't save this game's picture settings: ${e.message}`); }
     qpGamePic = null;
   }
+  saveCurrent();
+}
+// everything as it is now, saved (for the current profile, or config.json)
+function saveCurrent() {
   saveSettings(currentRegion(), cfg.volume, cfg.keyboard_highlight, cfg.languageChoice, cfg.introMode, cfg.stream_as_windows,
     cfg.intro_volume, cfg.intro_muted, cfg.muted, cfg.sign_out_on_exit,
     { res: cfg.stream_resolution, sharpen: cfg.video_sharpen, clarity: cfg.clarity_boost, ct: cfg.video_contrast, sa: cfg.video_saturation, br: cfg.video_brightness,
@@ -2522,6 +2641,7 @@ function openOverlay(what) {
   else if (what === 'prompt' && promptCur && promptCur.kind === 'pinsetup') showPin(wc, { kind: 'create' });
   else if (what === 'prompt' && promptCur && promptCur.kind === 'movepin') showPin(wc, promptCur.pend);
   else if (what === 'prompt' && promptCur && promptCur.kind === 'picktip') showAppPage(wc, 'xcloud-picktip.html', pickTipHtml());
+  else if (what === 'prompt' && promptCur && (promptCur.kind === 'whatsnew' || promptCur.kind === 'lowpower')) showAppPage(wc, 'xcloud-prompt.html', cardHtml(promptCur.kind));
   else if (what === 'prompt' && promptCur) showAppPage(wc, 'xcloud-prompt.html', promptHtml(promptCur.person));
   else showAppPage(wc, 'xcloud-intro.html', introHtml());
 }
@@ -2721,10 +2841,175 @@ function handleAction(wc, url) {
   }
   else if (action === 'settings-clear-cache') clearAppCache(wc);
   else if (action === 'settings-logs') saveSupportLogs(wc);
+  else if (action === 'settings-backup') makeBackup(wc);
+  else if (action === 'settings-restore') restoreBackup(wc, u.searchParams.get('f'));
   else if (action === 'settings-update-check') checkForUpdates();
   else if (action === 'settings-nettest') runNetTest(wc);
   else if (/^join-(pad|pick|leave)$/.test(action)) joinAction(wc, action, u.searchParams);
   else if (action === 'quit') fastExit('app screen');
+}
+
+// ---------- Back up and restore (Settings > Help and maintenance) ----------
+// One file in the share folder, xcloud-backup-<date>.json: config.json, the
+// profiles (names, ages, colours, gamerpics, their settings, the PIN's hash),
+// each profile's per-game picture settings and the picked games. Not the
+// Xbox sign-ins: after restoring on another machine, each profile signs in again.
+const BACKUP_RE = /^xcloud-backup-[\w-]+\.json$/;
+const BACKUP_FILES = /^(config\.json|profiles\.json|pin|children-mode|game-picture\.json|picked-games\.json|profile-settings\/p\d+\.json|profile-pics\/p\d+\.png)$/;
+function newestBackup() {
+  try {
+    const list = fs.readdirSync(SHARE).filter(f => BACKUP_RE.test(f) && !/before-restore/.test(f))
+      .map(f => ({ f, t: fs.statSync(path.join(SHARE, f)).mtimeMs })).sort((a, b) => b.t - a.t);
+    return list[0] || null;
+  } catch (e) { return null; }
+}
+function backupData() {
+  const files = {};
+  const add = rel => { try { files[rel] = fs.readFileSync(path.join(HOME, rel)).toString('base64'); } catch (e) { /* not there */ } };
+  ['config.json', 'profiles.json', 'pin', 'children-mode', 'game-picture.json', 'picked-games.json'].forEach(add);
+  for (const dir of ['profile-settings', 'profile-pics']) {
+    try { fs.readdirSync(path.join(HOME, dir)).forEach(f => { if (BACKUP_FILES.test(`${dir}/${f}`)) add(`${dir}/${f}`); }); } catch (e) { /* none */ }
+  }
+  return { app: 'xcloud-backup', version: VERSION, saved: new Date().toISOString(), files };
+}
+function writeBackup(name) {
+  const data = backupData();
+  fs.writeFileSync(path.join(SHARE, name), JSON.stringify(data, null, 1) + '\n');
+  return Object.keys(data.files).length;
+}
+function makeBackup(wc) {
+  const done = r => { if (wc && !wc.isDestroyed()) wc.executeJavaScript(`window.__backupStatus && window.__backupStatus(${JSON.stringify(r)})`).catch(() => {}); };
+  try {
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+    const name = `xcloud-backup-${stamp}.json`;
+    const n = writeBackup(name);
+    log(`settings backed up: ${path.join(SHARE, name)} (${n} files)`);
+    done({ f: name, t: Date.now() });
+  } catch (e) { log(`couldn't back up the settings: ${e.message}`); done(null); }
+}
+function restoreBackup(wc, name) {
+  const done = ok => { if (wc && !wc.isDestroyed()) wc.executeJavaScript(`window.__restoreStatus && window.__restoreStatus(${ok})`).catch(() => {}); };
+  try {
+    if (!BACKUP_RE.test(String(name || ''))) throw new Error('not a backup file name');
+    const data = JSON.parse(fs.readFileSync(path.join(SHARE, name), 'utf8'));
+    if (!data || data.app !== 'xcloud-backup' || !data.files || typeof data.files !== 'object') throw new Error('not an Xbox Cloud Gaming backup');
+    const files = Object.entries(data.files).filter(([rel, b64]) => BACKUP_FILES.test(rel) && typeof b64 === 'string');
+    if (!files.some(([rel]) => rel === 'config.json' || rel === 'profiles.json')) throw new Error('the backup has no settings in it');
+    // what's here now, kept just in case
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+    try { writeBackup(`xcloud-backup-before-restore-${stamp}.json`); } catch (e) { /* ignore */ }
+    // out with the old profile files, in with the backup's
+    for (const rel of ['profiles.json', 'pin', 'children-mode', 'game-picture.json', 'picked-games.json']) { try { fs.unlinkSync(path.join(HOME, rel)); } catch (e) { /* none */ } }
+    for (const dir of ['profile-settings', 'profile-pics']) {
+      try { fs.readdirSync(path.join(HOME, dir)).forEach(f => { try { fs.unlinkSync(path.join(HOME, dir, f)); } catch (e) { /* ignore */ } }); } catch (e) { /* none */ }
+    }
+    for (const [rel, b64] of files) {
+      const to = path.join(HOME, rel);
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.writeFileSync(to, Buffer.from(b64, 'base64'));
+    }
+    log(`settings restored from ${name} (saved ${data.saved}, v${data.version}, ${files.length} files): the app closes so they're used from the start`);
+    done(true);
+    setTimeout(() => fastExit('settings restored'), 3500);
+  } catch (e) { log(`couldn't restore ${name}: ${e.message}`); done(false); }
+}
+
+// ---------- Safe mode ----------
+// Hold LB + RB while the app opens (or start it with --safe): the picture
+// options that lean on the graphics chip go off, so a black or broken
+// picture can be fixed without a terminal. GPU acceleration and split
+// screen are set as the engine starts, so if they were on, the app closes
+// and is opened again as usual.
+let safeDone = false;
+function safeMode(how) {
+  if (safeDone) return;
+  safeDone = true;
+  const changed = [];
+  const set = (k, v) => { if (cfg[k] !== v) { cfg[k] = v; changed.push(k); } };
+  set('upscale_4k', false); set('video_cleanup', false); set('video_sharpen', 'off'); set('clarity_boost', false);
+  for (const k of PICTURE) set(k, 100);
+  set('stream_steady', false); set('picture_per_game', false);
+  const restart = GPU_AT_START || SPLIT_AT_START > 0;
+  if (SAFE_ARG) changed.push('gpu_acceleration (off for --safe)');
+  cfg.gpu_acceleration = false; cfg.split_players = 0;
+  try {
+    saveCurrent();
+    let base = {};
+    try { base = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) { /* none */ }
+    if (base.gpu_acceleration || base.split_players) {
+      base.gpu_acceleration = false; base.split_players = 0;
+      fs.writeFileSync(CONFIG, JSON.stringify(base, null, 2) + '\n');
+    }
+  } catch (e) { log(`safe mode: couldn't save: ${e.message}`); }
+  log(`safe mode (${how}): ${restart ? 'GPU acceleration / split screen off, ' : ''}${changed.length ? changed.join(', ') + ' off' : 'nothing else was on'}`);
+  if (restart) {
+    mainToast('safeClose', null, 6000);
+    setTimeout(() => fastExit('safe mode: open the app again'), 6000);
+    return;
+  }
+  mainToast(changed.length ? 'safeOn' : 'safeNone', null, 6000);
+  try { if (mainWin) applyStreamOptions(mainWin.webContents); } catch (e) { /* ignore */ }
+}
+ipcMain.on('xcloud-safe', () => {
+  if (Date.now() - APP_START > 45 * 1000) { log('LB + RB held, but not as the app opened: no safe mode'); return; }
+  safeMode('LB + RB held as the app opened');
+});
+
+// ---------- Low-power settings, and the one-time cards ----------
+const LOWPOWER_ASKED = path.join(HOME, 'lowpower-asked');
+const WHATSNEW_DUE = path.join(HOME, 'whats-new-due');
+function applyLowPower() {
+  cfg.reduce_anim = true; cfg.no_analytics = true; cfg.no_social = true;
+  cfg.upscale_4k = false; cfg.video_cleanup = false; cfg.video_sharpen = 'off'; cfg.clarity_boost = false; cfg.replay = false;
+  saveCurrent();
+  log('low-power settings turned on');
+  try { if (mainWin) applyStreamOptions(mainWin.webContents); } catch (e) { /* ignore */ }
+  mainToast('lpDone', null, 6000);
+}
+function cardHtml(kind) {
+  const L = cfg.language;
+  const T = (k, v) => i18n.t(L, k, v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const wn = kind === 'whatsnew';
+  const body = wn ? `<ul>${['wn1', 'wn2', 'wn3', 'wn4', 'wn5', 'wn6'].map(k => `<li>${T(k)}</li>`).join('')}</ul>` : `<p class="q">${T('lpQ')}</p>`;
+  const btns = wn ? [['ok', T('pinOk'), true]] : [['yes', T('lpYes'), true], ['no', T('lpNo'), false]];
+  return `<!doctype html>
+<html lang="${L}"><head><meta charset="utf-8"><title>Xbox Cloud Gaming</title>
+<style>
+  ${i18n.FONT_CSS}${PAGE_CSS}
+  .card{max-width:1000px;text-align:left}
+  h1{text-align:center;margin-bottom:24px}
+  ul{margin:0 0 30px;padding:0;list-style:none}
+  li{position:relative;padding-left:34px;font-size:23px;line-height:1.4;color:#eee;margin:0 0 14px}
+  li:before{content:'';position:absolute;left:4px;top:11px;width:14px;height:14px;border-radius:50%;background:#107c10}
+  .q{font-size:24px;line-height:1.45;margin:0 0 32px;color:#eee}
+  .row{display:flex;gap:20px;justify-content:center}
+  .b{border-radius:10px;padding:16px 34px;font-size:22px;font-weight:600;background:#262626;color:#ddd;border:3px solid #555}
+  .b.yes{background:#107c10;color:#fff;border-color:#107c10}
+  .b.on{outline:4px solid #fff;outline-offset:4px}
+</style></head><body>
+<div class="card" data-card="${kind}">
+  <h1>${wn ? T('wnT', { v: VERSION }) : T('lpT')}</h1>
+  ${body}
+  <div class="row">${btns.map(([a, t, y]) => `<button class="b${y ? ' yes' : ''}" data-a="${a}">${t}</button>`).join('')}</div>
+</div>
+<script>
+(function () {
+  var P = '${ACTION_PREFIX}';
+  var bs = Array.prototype.slice.call(document.querySelectorAll('.b')), cur = 0, sent = false;
+  function go(a) { if (sent) return; sent = true; location.href = P + 'card?a=' + a; }
+  function render() { bs.forEach(function (b, i) { b.classList.toggle('on', i === cur); }); }
+  bs.forEach(function (b, i) { b.addEventListener('click', function () { cur = i; go(b.getAttribute('data-a')); }); });
+  window.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowUp') cur = (cur + 1) % bs.length;
+    else if (k === 'Enter' || k === ' ' || k === 'NumpadEnter') { go(bs[cur].getAttribute('data-a')); return; }
+    else if (k === 'Escape' || k === 'Backspace') { go(bs[bs.length - 1].getAttribute('data-a')); return; }
+    else return;
+    e.preventDefault(); render();
+  });
+  render();
+})();
+</script></body></html>`;
 }
 
 // ---------- Clear cache ----------
@@ -4191,7 +4476,7 @@ function createWindow() {
 function preloadText() {
   const L = cfg.language;
   const keys = ['hintPad', 'pressAny', 'controller', 'connected', 'holdExit', 'padGone', 'padBack', 'kShift', 'kSpace', 'kDel', 'kDone', 'kHide', 'kText', 'homeBtn', 'homeHint', 'rowNone', 'rowHint',
-    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'qpShot', 'qpShotGo', 'qpTip', 'upT', 'utT', 'utScreen', 'usT', 'cleanT', 'qpGame', 'statsT', 'qpReplay', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
+    'qpTitle', 'qpAudio', 'qpVideo', 'qpHint', 'qpShot', 'qpShotGo', 'qpSaveGo', 'qpTip', 'upT', 'utT', 'utScreen', 'usT', 'cleanT', 'qpGame', 'statsT', 'qpReplay', 'volume', 'boostT', 'shT', 'clT', 'saT', 'ctT', 'brT', 'on', 'off', 'shLow', 'shMed', 'shHigh', 'muted'];
   const text = Object.fromEntries(keys.map(k => [k, i18n.t(L, k)]));
   // the Japanese / Korean letters, for the keyboard and messages on the Xbox page
   return { lang: L, text, fontCss: L === 'ja' || L === 'ko' ? i18n.FONT_CSS : '', fontStack: i18n.FONT_STACK };
@@ -4308,7 +4593,12 @@ app.whenReady().then(() => {
     const lastFile = path.join(HOME, 'last-version');
     let before = '';
     try { before = fs.readFileSync(lastFile, 'utf8').trim(); } catch (e) { /* first run */ }
-    if (before && before !== VERSION) log(`updates: the app was updated from v${before} to v${VERSION}`);
+    if (before && before !== VERSION) {
+      log(`updates: the app was updated from v${before} to v${VERSION}`);
+      try { fs.writeFileSync(WHATSNEW_DUE, VERSION + '\n'); } catch (e) { /* ignore */ }
+    }
+    // a first start on a smaller (ARM) device: the low-power settings are offered once
+    if (!before && !X64 && !fs.existsSync(LOWPOWER_ASKED)) { try { fs.writeFileSync(LOWPOWER_ASKED + '-due', 'x'); } catch (e) { /* ignore */ } }
     if (before !== VERSION) fs.writeFileSync(lastFile, VERSION + '\n');
   } catch (e) { /* ignore */ }
   // keep the screen awake: playing with only a controller doesn't count as
@@ -4324,6 +4614,15 @@ app.whenReady().then(() => {
   if (cfg.game_list === 'picked' && fs.existsSync(PICK_TIP_DUE)) {
     try { fs.unlinkSync(PICK_TIP_DUE); } catch (e) { /* ignore */ }
     if (!SETTINGS_MODE && !GAME_ID) whenSiteReady(() => pickTipDue(), 8000);
+  }
+  if (SAFE_ARG) setTimeout(() => safeMode('--safe'), 3000);
+  // the one-time cards: what's new after an update; the low-power settings on an ARM device's first start
+  if (!SETTINGS_MODE && !GAME_ID) {
+    if (fs.existsSync(LOWPOWER_ASKED + '-due') && !fs.existsSync(LOWPOWER_ASKED)) {
+      whenSiteReady(() => { try { fs.unlinkSync(LOWPOWER_ASKED + '-due'); } catch (e) { /* ignore */ } queuePrompt({ kind: 'lowpower' }); }, 10000);
+    } else if (fs.existsSync(WHATSNEW_DUE)) {
+      whenSiteReady(() => { try { fs.unlinkSync(WHATSNEW_DUE); } catch (e) { /* ignore */ } queuePrompt({ kind: 'whatsnew' }); }, 10000);
+    }
   }
   // Batocera's game list: kept up to date (Game Pass changes every couple of weeks)
   if (cfg.game_list !== 'off') {

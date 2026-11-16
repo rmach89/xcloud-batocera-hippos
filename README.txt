@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.7 (November 2026)
+Version 1.2.8 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -153,6 +153,9 @@ Open with Backspace on the dashboard, from the welcome screen, or from
 F1 > Applications > Xbox Cloud Gaming Settings.
 Controller: up / down to move, left / right to change, A to select, Menu
 to save, B to cancel. Keyboard: arrows, Enter, S to save, Esc to cancel.
+LB / RB (Page Up / Page Down) jump to the previous / next section.
+Y twice puts the section you're in back to how the app comes (Region
+and Language stay as they are); Save keeps it, Cancel undoes it.
 
 The rows are grouped in sections:
 
@@ -163,14 +166,20 @@ The rows are grouped in sections:
                              shared machine)
 
   GENERAL
-  Region                     the country and language of the Xbox site
+  Region                     the country and language of the Xbox site:
+                             its store, prices and game list. Xbox still
+                             sees where you really are, so this alone
+                             doesn't get around a country where Xbox
+                             Cloud Gaming isn't offered
   Region unlock (no VPN)     off / Australia / Brazil / Europe / Japan /
                              Korea / United States. For where Xbox Cloud
                              Gaming isn't offered: Xbox is told you're in
-                             that country. No VPN, but the same risk as
-                             one, and that country's
-                             servers may be far away (higher ping).
-                             Applies after Reload dashboard
+                             that country, and games then run on that
+                             country's servers, so the further away it
+                             is, the higher the ping. Leave it off if
+                             Xbox Cloud Gaming works where you are. No
+                             VPN, but the same risk as one. Applies
+                             after Reload dashboard
   Language                   the language of the app's own screens
                              ("Same as Batocera", or "Same as HippOS"
                              on HippOS, follows the system's language)
@@ -180,6 +189,13 @@ The rows are grouped in sections:
   Light up keys when typing  real-keyboard keys light up on screen
   Intro video                every time / once a day / off
   Intro video sound          the intro's volume, or mute
+  Low-power settings         A: the lighter choices for slower devices
+                             in one go: fewer animations, analytics and
+                             social features off, and sharpening, 4K
+                             upscaling, video clean-up, clarity boost
+                             and instant replay off. Save keeps them.
+                             (On an ARM device the app offers this once,
+                             the first time it opens)
 
   STREAM
   Stream resolution          720p (standard, about 10 Mbps internet,
@@ -313,6 +329,18 @@ The rows are grouped in sections:
                              /userdata/xcloud-logs-<date>-<time>.zip
                              (gamertags are replaced; nothing about
                              sign-ins is included)
+  Back up settings           saves the settings, profiles (names,
+                             colours, gamerpics, each one's settings, the
+                             PIN's hash), per-game picture settings and
+                             picked games in one file:
+                             /userdata/xcloud-backup-<date>-<time>.json.
+                             The Xbox sign-ins aren't in it
+  Restore settings           A twice: puts back the newest backup in
+                             /userdata (the screen shows which). What was
+                             there is kept first as
+                             xcloud-backup-before-restore-....json. The
+                             app then closes; open it again. On another
+                             machine each profile signs in to Xbox again
   Updates                    shows the app and engine versions. One press
                              checks GitHub for a newer app (published
                              Releases only) and Electron for a newer
@@ -372,6 +400,9 @@ The files: one small file per game in /userdata/roms/xcloud, pictures in
 Profiles and PIN
 ----------------
 Each person can have a profile, with their own Xbox sign-in and
+settings: every Settings choice is theirs, except GPU acceleration, split
+screen, the EmulationStation game list and the controller layout, which
+are for the whole machine. A new profile starts from the machine's
 settings. The first person to sign in becomes the first profile. When
 someone else signs in, the app offers to set up profiles.
 
@@ -518,6 +549,14 @@ Logs in /userdata/system/logs:
                        lines starting "updates:")
 Settings > Save logs for help puts them in one zip for sending.
 
+- The picture is black, flickers or breaks up: hold LB + RB (L1 + R1)
+  for 2 seconds while the app opens (safe mode). It turns off GPU
+  acceleration, split screen, 4K upscaling, video clean-up, sharpening,
+  clarity boost, Keep stream quality steady, picture settings per game,
+  and puts contrast, saturation and brightness back to 100%. If GPU
+  acceleration or split screen was on, the app closes: open it again.
+  Turn things back on one at a time in Settings. From a terminal:
+  Run-App.sh --safe does the same.
 - The app flashes and closes: check xcloud.log.
   - "No space left on device": /userdata is full.
   - "Could not set up the browser engine": the download failed (no
@@ -531,6 +570,21 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.8
+-------------------
+- Each profile keeps all of its own settings. Before, with profiles set
+  up, most settings added since 1.2.5 went back to their old values the
+  next time the app opened.
+- Settings: LB / RB jump between sections, and Y twice resets the one
+  you're in.
+- Low-power settings in Settings > General, offered once on ARM devices.
+- Back up settings and Restore settings (Help and maintenance).
+- Safe mode: hold LB + RB while the app opens (see Troubleshooting).
+- A short "What's new" card the first time the app opens after an update.
+- Quick settings: "Take" and "Save" instead of "Press A" on the
+  screenshot and instant replay rows.
+- Clearer help for Region and Region unlock.
 
 What's new in 1.2.7
 -------------------
