@@ -121,8 +121,8 @@ In Settings: up and down to move, left and right to change, A to select, Menu to
 | Profile and account | Change user, sign out of Xbox, sign out when closing |
 | General | Region, region unlock (no VPN), language, volume, game volume boost, key highlights, intro video and its sound, low-power settings |
 | Stream | Resolution, connection check, stream as a Windows PC, GPU acceleration, prefer IPv6 server, keep stream quality steady, reconnect automatically, stay connected, microphone on game launch, instant replay, stream stats (with 60-second graphs) |
-| Picture | Sharpening, 4K upscaling with its size and sharpness (64-bit PCs), video clean-up, Clarity boost, contrast, colour saturation, brightness, picture settings per game |
-| Controller | The full list of controls, vibration strength, on-screen touch controller, controller battery, split screen (2-4 players), remember split-screen players |
+| Picture | Sharpening, 4K upscaling with its size and sharpness (64-bit PCs), video clean-up, Clarity boost, contrast, colour saturation, brightness, settings per game (picture, game volume boost and vibration) |
+| Controller | The full list of controls, vibration strength, each controller's own stick dead zone, vibration and A/B X/Y swap, on-screen touch controller, controller battery, split screen (2-4 players), remember split-screen players |
 | Xbox dashboard | Disable social features, wait time on game pages, skip Xbox splash video, turn off post-game feedback, reduce animations, turn off analytics |
 | EmulationStation | The game list (Off / All cloud games / Free with ads / Games I pick), 3D game boxes |
 | Help and maintenance | Reload dashboard, clear cache, save logs for help, back up settings, restore settings, updates |

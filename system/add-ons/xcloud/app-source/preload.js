@@ -625,6 +625,8 @@ const QP_ROWS = [
   { sec: 'qpAudio' },
   { k: 'volume', t: 'volume', min: 0, max: 100, step: 10, def: 100 },
   { k: 'boost', t: 'boostT', min: 100, max: 600, step: 50, def: 100 },
+  { sec: 'secPad' },
+  { k: 'vib', t: 'vibT', min: 0, max: 100, step: 25, def: 100 },
   { sec: 'qpVideo' },
   { k: 'sharpen', t: 'shT', list: ['off', 'low', 'medium', 'high'], def: 'off' },
   { k: 'clarity', t: 'clT', toggle: true, def: false },

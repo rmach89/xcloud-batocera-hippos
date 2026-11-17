@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.8 (November 2026)
+Version 1.2.9 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -100,12 +100,13 @@ opens Settings directly.
 
 Quick settings in a game: hold LB + RB + View (L1 + R1 + Share/Select)
 for 1 second while playing, or press F9 on a keyboard. A panel opens on
-the right with the sound (Volume, Game volume boost) and the picture
-(Sharpening, Clarity boost, Colour saturation, Contrast, Brightness,
-Video clean-up, and on 64-bit PCs 4K upscaling with its size and
-sharpness), and Stream stats on or off; with Instant replay on, "Save
-the last 30 seconds" too. With Picture settings per game on, the picture settings
-changed here are kept for that game only.
+the right with the sound (Volume, Game volume boost), Controller
+vibration, the picture (Sharpening, Clarity boost, Colour saturation,
+Contrast, Brightness, Video clean-up, and on 64-bit PCs 4K upscaling
+with its size and sharpness), and Stream stats on or off; with Instant
+replay on, "Save the last 30 seconds" too. With Settings per game on,
+the picture, boost and vibration changed here are kept for that game
+only.
 Up / down choose, left / right change, A puts one back to its default,
 B (or the same buttons, F9, Esc) closes. Changes show at once and are
 saved when it closes. The game doesn't get the controller while it's up.
@@ -266,14 +267,27 @@ The rows are grouped in sections:
                              switch (works together with the sliders)
   Contrast, Colour           fine-tune the game's picture, 50-150%.
   saturation, Brightness     A / Enter puts a slider back to 100%
-  Picture settings per game  quick settings in a game saves the picture
-                             settings for that game only; other games
-                             keep the ones here
+  Settings per game          quick settings in a game saves the picture,
+                             Game volume boost and controller vibration
+                             for that game only; other games keep the
+                             ones here
 
   CONTROLLER
   Controls                   every button and key the app uses
   Controller vibration       how strong the rumble is in games: off, 25%,
                              50%, 75% or 100%
+  Each controller            pick a connected controller (left / right)
+                             to give it settings of its own, kept by its
+                             name (two of the same model share them) and
+                             for the whole machine, not per profile:
+    Stick dead zone          off / 5% / 10% / 15% / 20% / 25%: small
+                             stick movements are ignored, for a stick
+                             that drifts; past it the stick still
+                             reaches full
+    Its vibration            same as above / off / 25% / 50% / 75% / 100%
+    Swap A/B and X/Y         for controllers with these buttons the
+                             other way round (in games; the app's own
+                             screens keep A as select)
   On-screen touch controller see-through controller buttons over a game
                              while it streams, for touch screens: sticks,
                              D-pad, A B X Y, bumpers, triggers, View,
@@ -570,6 +584,14 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.2.9
+-------------------
+- Settings > Controller > Each controller: a stick dead zone, its own
+  vibration strength, and A/B and X/Y swapped, for each controller.
+- Settings per game (was Picture settings per game) also keeps the game
+  volume boost and controller vibration for each game.
+- Quick settings has a Controller vibration row.
 
 What's new in 1.2.8
 -------------------

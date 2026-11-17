@@ -2,6 +2,12 @@
 
 Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. Download them from [Releases](https://github.com/rmach89/xcloud-batocera-hippos/releases).
 
+## 1.2.9
+
+- Settings > Controller > Each controller: a stick dead zone, its own vibration strength, and A/B and X/Y swapped, for each controller.
+- Settings per game (was Picture settings per game) also keeps the game volume boost and controller vibration for each game.
+- Quick settings has a Controller vibration row.
+
 ## 1.2.8
 
 - Each profile keeps all of its own settings. Before, with profiles set up, most settings added since 1.2.5 went back to their old values the next time the app opened.

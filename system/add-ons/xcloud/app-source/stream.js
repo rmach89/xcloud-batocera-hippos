@@ -22,6 +22,8 @@
 //   steady  true / false                    ask Xbox to keep the bitrate up (SDP bandwidth)
 //   alive   true / false                    answer Xbox's "are you still there?"
 //   reconnect true / false                  a dropped stream: press Xbox's own reconnect button
+//   pads    { <controller id>: { dz, vib, swap } }  each controller's own settings (Settings > Controller):
+//           stick dead zone %, vibration % (-1: as vib), A/B and X/Y swapped (applied in main.js's PAD_GATE)
 (function () {
   if (window.__xcloudStream) return;
   window.__xcloudStream = 1;
@@ -70,7 +72,7 @@
       if (!text) return res;
       var obj = JSON.parse(text), over = JSON.parse(obj.clientStreamingConfigOverrides || '{}') || {};
       over.inputConfiguration = over.inputConfiguration || {};
-      over.inputConfiguration.enableVibration = C.vib > 0;
+      over.inputConfiguration.enableVibration = C.vib > 0 || Object.keys(C.pads || {}).some(function (id) { return C.pads[id].vib > 0; });
       obj.clientStreamingConfigOverrides = JSON.stringify(over);
       return new Response(JSON.stringify(obj), { status: res.status, statusText: res.statusText, headers: res.headers });
     } catch (e) { return res; }
@@ -336,11 +338,17 @@
   };
 
   // ---------- vibration strength ----------
+  // (a controller with its own vibration setting: that one; the others: the general one)
+  function vibOf(actuator) {
+    var own = -1;
+    try { own = window.__xcloudPadVib ? window.__xcloudPadVib(actuator) : -1; } catch (e) { own = -1; }
+    return Math.max(0, Math.min(100, Number(own >= 0 ? own : C.vib))) / 100;
+  }
   var HA = window.GamepadHapticActuator && window.GamepadHapticActuator.prototype;
   if (HA && HA.playEffect) {
     var playEffect = HA.playEffect;
     HA.playEffect = function (type, p) {
-      var k = Math.max(0, Math.min(100, Number(C.vib))) / 100;
+      var k = vibOf(this);
       if (k <= 0) return Promise.resolve('complete');
       if (k < 1 && p) {
         p = Object.assign({}, p);
@@ -352,7 +360,7 @@
   if (HA && HA.pulse) {
     var pulse = HA.pulse;
     HA.pulse = function (value, duration) {
-      var k = Math.max(0, Math.min(100, Number(C.vib))) / 100;
+      var k = vibOf(this);
       if (k <= 0) return Promise.resolve(true);
       return pulse.call(this, value * k, duration);
     };
@@ -726,6 +734,7 @@
 
   window.__xcloudStreamSet = function (c) {
     Object.assign(C, c || {});
+    window.__xcloudPadCfg = C.pads || {};
     try { sharpen(); } catch (e) { /* no page yet */ }
     try { anim(); } catch (e) { /* no page yet */ }
     if (!C.up && !C.clean && UP.vid) upOff();
