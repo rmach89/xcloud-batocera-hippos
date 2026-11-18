@@ -201,3 +201,15 @@ MIT. See [LICENSE](LICENSE).
 - The intro video and sound are original, made for this project.
 - Japanese and Korean text uses parts of Noto Sans CJK (SIL Open Font License 1.1). The controller emoji is from Noto Color Emoji (Apache License 2.0).
 - Batocera, HippOS and EmulationStation are their own projects; this add-on only adds a system to them.
+
+### Ideas and inspiration
+
+Several features were inspired by these projects. Thank you to their authors. The ideas came from them; the code here is written for this add-on, and none of theirs is copied.
+
+| Project | Author | What it inspired here |
+|---|---|---|
+| [Better xCloud](https://github.com/redphx/better-xcloud) (MIT) | redphx | Game volume boost, microphone on launch, prefer IPv6, wait time on game pages, disable social features, touch controller, screenshots with picture settings, skip splash, post-game feedback off, reduce animations, analytics off |
+| [Xbox Cloud Gaming Region Unlocker](https://greasyfork.org/en/scripts/455261-xbox-cloud-gaming-region-unlocker) | TGSAN | Region unlock without a VPN |
+| [XFly](https://github.com/m669st/XFly) (MIT) | m669st | 4K upscaling, video clean-up, keep stream quality steady |
+| [OpenXCloud](https://github.com/shyim/openxcloud) (GPL-3.0) | shyim | Upscale size and sharpness, stream stats graphs |
+| [Quadcloud](https://github.com/jerdaz/quadcloud) (MIT) | jerdaz | Split screen for 2 to 4 players |

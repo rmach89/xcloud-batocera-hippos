@@ -828,3 +828,19 @@ with.
   License 1.1).
 - Batocera, HippOS and EmulationStation are their own projects; this app
   only adds a system to them.
+- Ideas and inspiration (thank you to their authors; the ideas came from
+  them, the code here is this app's own and none of theirs is copied):
+    Better xCloud (redphx, MIT), github.com/redphx/better-xcloud:
+      game volume boost, microphone on launch, prefer IPv6, wait time,
+      disable social features, touch controller, screenshots with
+      picture settings, skip splash, post-game feedback off, reduce
+      animations, analytics off
+    Xbox Cloud Gaming Region Unlocker (TGSAN), greasyfork.org/en/scripts/
+      455261-xbox-cloud-gaming-region-unlocker: region unlock without
+      a VPN
+    XFly (m669st, MIT), github.com/m669st/XFly: 4K upscaling, video
+      clean-up, keep stream quality steady
+    OpenXCloud (shyim, GPL-3.0), github.com/shyim/openxcloud: upscale
+      size and sharpness, stream stats graphs
+    Quadcloud (jerdaz, MIT), github.com/jerdaz/quadcloud: split screen
+      for 2 to 4 players
