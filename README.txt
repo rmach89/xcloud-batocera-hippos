@@ -62,9 +62,6 @@ temporary folder in /userdata, installs it and deletes the folder again.
 This file is copied next to the app, as
 /userdata/system/add-ons/xcloud/README.txt.
 
-BUA (Batocera Unofficial Add-ons) runs the same installer, so it gets
-the newest version too.
-
 To install a fixed version instead of the newest, give its tag:
   XCLOUD_TAG=v1.3.2 bash /tmp/xcloud-install.sh
 Settings > Updates then follows that tag rather than main.
@@ -567,8 +564,6 @@ It asks first (and asks for the PIN when a child's profile exists).
   no need to restart it.
 To remove everything without questions:
   bash /userdata/system/add-ons/xcloud/uninstall.sh --all
-From BUA its questions appear on BUA's screen. The PIN can't be typed
-there, so when one is needed, use the F1 shortcut above instead.
 
 
 Troubleshooting
@@ -635,7 +630,7 @@ What's new in 1.3.0
 -------------------
 - No more zips: install.sh downloads the newest version straight from
   the main branch on GitHub, installs it and tidies up (see Install and
-  update). BUA runs the same installer.
+  update).
 - Settings > Updates checks the main branch too, so the app is always as
   new as the project.
 - This README is copied next to the app

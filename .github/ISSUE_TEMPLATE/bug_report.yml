@@ -64,7 +64,6 @@ body:
     attributes:
       label: How it was installed
       options:
-        - BUA
         - HippOS content downloader
         - The installer (install.sh)
         - A git clone of this repository

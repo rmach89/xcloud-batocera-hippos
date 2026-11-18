@@ -2,7 +2,7 @@
 
 Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](https://batocera.org) and [HippOS](https://hippos-linux.org). Pick it, and a fullscreen app opens on [play.xbox.com](https://play.xbox.com), ready for your controller. Your cloud games can sit in EmulationStation's list like any other system, with box art, 3D cases and age ratings.
 
-**[⬇ Install](#install)**: one command, always the newest version · also in **BUA** (Batocera Unofficial Add-ons)
+**[⬇ Install](#install)**: one command, always the newest version
 
 > **Unofficial project, use at your own risk.** Not affiliated with, endorsed by or sponsored by Microsoft or Xbox. Xbox, Xbox Cloud Gaming and Xbox Game Pass are trademarks of the Microsoft group of companies.
 
@@ -68,7 +68,7 @@ bash /tmp/xcloud-install.sh
 
 The installer downloads the newest version straight from this repository's main branch, installs it, and tidies up after itself. Answer its questions, then restart EmulationStation. Xbox Cloud Gaming appears in the carousel.
 
-It's also in **BUA** (Batocera Unofficial Add-ons): pick **Xbox Cloud Gaming** there. BUA runs the same installer, so it gets the newest version too, and the installer's questions appear on BUA's screen. On HippOS the installer asks nothing.
+On HippOS the installer asks nothing.
 
 Installed from a `git clone` of this repository? Run `bash install.sh` in it. If main has a newer version than your copy, it offers that one instead.
 
@@ -149,7 +149,7 @@ F1 → Applications → **Xbox Cloud Gaming Uninstaller**, or:
 bash /userdata/system/add-ons/xcloud/uninstall.sh
 ```
 
-It asks before removing anything, and can keep everyone's sign-ins and profiles for a reinstall. When it's done, press Enter to exit; EmulationStation reloads by itself. To remove everything without questions, add `--all`. From BUA, its questions appear on BUA's screen; if a child's profile needs the PIN, use the F1 shortcut instead, since BUA can't take typed answers.
+It asks before removing anything, and can keep everyone's sign-ins and profiles for a reinstall. When it's done, press Enter to exit; EmulationStation reloads by itself. To remove everything without questions, add `--all`.
 
 ## FAQ
 
