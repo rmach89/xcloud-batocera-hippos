@@ -7,6 +7,7 @@ Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. The insta
 - MIT license.
 - `XCLOUD_TAG=v1.3.2` installs a fixed, tagged version instead of main, and Settings > Updates then follows that tag (for a distribution that wants to pin one).
 - The HippOS content downloader isn't mentioned any more: it has no entry for Xbox Cloud Gaming yet.
+- HippOS: nothing is put in its system area any more. The logo that was copied into HippOS's built-in theme with sudo, and the start script that put it back, are gone: HippOS's own themes carry the art.
 
 ## 1.3.1
 

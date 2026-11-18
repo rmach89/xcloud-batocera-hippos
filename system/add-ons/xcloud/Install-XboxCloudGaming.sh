@@ -47,7 +47,7 @@ fi
 
 # make sure the package files were copied over
 missing=""
-for f in xcloud.png xcloud-hippos.png xcloud-hippos-logo.sh xcloud-apply-update.sh xcloud-icon.png xcloud-uninstall-icon.png xcloud-settings-icon.png xcloud1.png es_systems_xcloud.cfg gamelist.xml Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json app.asar launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
+for f in xcloud.png xcloud-apply-update.sh xcloud-icon.png xcloud-uninstall-icon.png xcloud-settings-icon.png xcloud1.png es_systems_xcloud.cfg gamelist.xml Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json app.asar launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
     [ -s "$FILES/$f" ] || missing="$missing $f"
 done
 if [ -n "$missing" ]; then
@@ -59,10 +59,10 @@ fi
 mkdir -p "$ES" "$ROMS/images" || { echo "Install failed: could not create folders."; exit 1; }
 
 # strip any Windows line endings picked up while copying, then set permissions
-for f in es_systems_xcloud.cfg gamelist.xml xcloud-hippos-logo.sh xcloud-apply-update.sh Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
+for f in es_systems_xcloud.cfg gamelist.xml xcloud-apply-update.sh Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
     tr -d '\r' < "$FILES/$f" > "$FILES/$f.tmp" && mv "$FILES/$f.tmp" "$FILES/$f"
 done
-chmod +x "$FILES/xcloud-service.sh" "$FILES/xcloud-hippos-logo.sh" "$FILES/xcloud-apply-update.sh" "$FILES/Launch-XboxCloudGaming.sh" "$FILES/Run-App.sh" "$FILES/Return-To-Carousel.py" "$FILES/uninstall.sh" "$FILES/Uninstall-From-Menu.sh" "$FILES/Build-Runtime.py" "$FILES/Sync-GameList.py"
+chmod +x "$FILES/xcloud-service.sh" "$FILES/xcloud-apply-update.sh" "$FILES/Launch-XboxCloudGaming.sh" "$FILES/Run-App.sh" "$FILES/Return-To-Carousel.py" "$FILES/uninstall.sh" "$FILES/Uninstall-From-Menu.sh" "$FILES/Build-Runtime.py" "$FILES/Sync-GameList.py"
 
 # --- Launch Single Game (optional: install.sh asks; XCLOUD_SINGLE_LAUNCH=yes/no) ---
 # Two EmulationStation event scripts: when you pick a system that holds
@@ -247,44 +247,15 @@ for theme in "${THEME_DIRS[@]}"; do
 done
 echo "Copied the carousel logo (and background, where the theme has them) into $count theme(s)."
 
-# --- HippOS: the logo in its built-in theme (es-theme-hippos-minimal) ---
-# Built-in themes are in HippOS's system area: only root can write there,
-# and every HippOS update replaces it. HippOS lets its user run sudo without
-# a password, so the logo goes in with "sudo -n" (never asks; skipped if it
-# isn't allowed), and an EmulationStation start script puts it back after
-# an update. The theme shows each system's art/<system>.svg, or .png when
-# there's no .svg, tinted with its colour: the logo is xcloud.png in white
-# (xcloud-hippos.png), so it comes out in the theme's colour.
-HIPPOS_LIST="$FILES/hippos-theme-files.txt"
-HIPPOS_START="$ES/scripts/start/xcloud-theme-logo.sh"
+# --- HippOS: its built-in themes ---
+# They're in HippOS's system area, which belongs to HippOS: nothing is put
+# there. HippOS's own themes carry their art for Xbox Cloud Gaming (until
+# they do, they show its name); themes in /userdata/themes get ours above.
+# Earlier versions placed a logo there with sudo and kept a start script to
+# put it back: the script and its list go (HippOS's next update clears the logo).
 if [ "$OS" = hippos ]; then
-    # the 1.1.24 test build's xcloud.svg would be shown instead of the PNG: take it out
-    if [ -s "$HIPPOS_LIST" ] && sudo -n true 2>/dev/null; then
-        while IFS=$'\t' read -r dest src; do
-            case "$dest" in *.svg) [ -e "$dest" ] && cmp -s "$src" "$dest" && sudo -n rm -f "$dest" 2>/dev/null && echo "Removed the earlier xcloud.svg from $(dirname "$dest")" ;; esac
-        done < "$HIPPOS_LIST"
-    fi
-    rm -f "$FILES/xcloud.svg"
-    : > "$HIPPOS_LIST"
-    if sudo -n true 2>/dev/null; then
-        placed=0
-        for theme in "$THEMES"/*; do
-            [ -d "$theme/art" ] || continue
-            [ -f "$theme/art/snes.svg" ] || [ -f "$theme/art/snes.png" ] || continue
-            src="$FILES/xcloud-hippos.png"; dest="$theme/art/xcloud.png"
-            # a theme that ships its own xcloud.svg keeps it (it'd be shown first anyway)
-            if [ -e "$theme/art/xcloud.svg" ]; then echo "$(basename "$theme") has its own Xbox Cloud Gaming logo; left as it is."; continue; fi
-            # a theme that ships its own xcloud logo keeps it
-            if [ -e "$dest" ] && ! cmp -s "$src" "$dest"; then echo "$(basename "$theme") has its own Xbox Cloud Gaming logo; left as it is."; continue; fi
-            printf '%s\t%s\n' "$dest" "$src" >> "$HIPPOS_LIST"
-            if sudo -n cp -f "$src" "$dest" 2>/dev/null; then placed=$((placed+1)); else echo "Could not place $dest"; fi
-        done
-        mkdir -p "$ES/scripts/start" && cp -f "$FILES/xcloud-hippos-logo.sh" "$HIPPOS_START" && chmod +x "$HIPPOS_START"
-        echo "HippOS: carousel logo placed in $placed built-in theme(s) (with sudo); it's put back after HippOS updates when EmulationStation starts."
-    else
-        rm -f "$HIPPOS_START"
-        echo "HippOS: sudo needs a password here, so the built-in theme shows \"Xbox Cloud Gaming\" as text (the app works the same)."
-    fi
+    rm -f "$ES/scripts/start/xcloud-theme-logo.sh" "$FILES/hippos-theme-files.txt" "$FILES/xcloud-hippos-logo.sh" "$FILES/xcloud-hippos.png"
+    echo "HippOS: its built-in themes show their own Xbox Cloud Gaming art (or its name); nothing is changed in HippOS's system area."
 fi
 
 # stop here if the important parts are missing, leaving the installer in place
@@ -387,12 +358,7 @@ if [ -f "$CUSTOM" ] && grep -q '# xcloud-boot-restore' "$CUSTOM"; then
 fi
 rm -f "$FILES/created-custom-sh" "$FILES/persist-mode"
 
-# HippOS: our logo in its built-in theme, and the start script that puts it back
-if [ -s "$FILES/hippos-theme-files.txt" ]; then
-    while IFS=$'\t' read -r dest src; do
-        [ -n "$dest" ] && [ -e "$dest" ] && cmp -s "$src" "$dest" && sudo -n rm -f "$dest" 2>/dev/null
-    done < "$FILES/hippos-theme-files.txt"
-fi
+# HippOS: the start script earlier versions used for its built-in theme
 rm -f "$ES/scripts/start/xcloud-theme-logo.sh" "$FILES/hippos-theme-files.txt"
 
 # nothing of this package in Ports (also clears entries from older versions)
@@ -541,7 +507,7 @@ if [ "$OS" = hippos ] && [ "$(id -u)" = 0 ]; then
         OWNER="$(id -u hippos 2>/dev/null):$(id -g hippos 2>/dev/null)"
     fi
     if [ "$OWNER" != ":" ] && [ "$OWNER" != "0:0" ]; then
-        for p in "$FILES" "$ROMS" "$ES/es_systems_xcloud.cfg" "$LS_SCRIPT" "$LS_ARM" "$HIPPOS_START" "$LIST" \
+        for p in "$FILES" "$ROMS" "$ES/es_systems_xcloud.cfg" "$LS_SCRIPT" "$LS_ARM" "$LIST" \
                  "$LOGDIR"/xcloud*.log "$APPS"/xcloud-*.desktop "$DESK_APPS"/xcloud-*.desktop \
                  /userdata/themes/*/art/xcloud* /userdata/themes/*/art/logos/xcloud*; do
             [ -e "$p" ] && chown -R "$OWNER" "$p" 2>/dev/null

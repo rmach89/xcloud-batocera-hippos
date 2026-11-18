@@ -496,9 +496,10 @@ there, so the app puts them back as links at every boot:
   /userdata/system/custom.sh.
 xcloud-boot.log says what was linked.
 
-On HippOS everything stays in /userdata. Its built-in theme gets the
-logo with sudo, and a small start script puts it back after HippOS
-updates.
+On HippOS everything stays in /userdata, and nothing in HippOS's system
+area is changed. HippOS's built-in themes show their own Xbox Cloud
+Gaming art (or its name, until they have some); themes you add in
+/userdata/themes get the logo from the installer.
 
 Installed a new theme? Run install.sh again to give it the logo.
 
@@ -601,6 +602,9 @@ What's new in 1.3.2
   wants to pin one).
 - The HippOS content downloader isn't mentioned any more: it has no
   entry for Xbox Cloud Gaming yet. Install with the one command.
+- HippOS: nothing is put in its system area any more. The logo that was
+  copied into HippOS's built-in theme with sudo, and the start script
+  that put it back, are gone: HippOS's own themes carry the art.
 
 What's new in 1.3.1
 -------------------

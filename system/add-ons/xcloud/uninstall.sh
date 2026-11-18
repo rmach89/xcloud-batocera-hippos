@@ -119,12 +119,7 @@ elif [ "$ALL" != 1 ] && [ -t 0 ]; then
     esac
 fi
 
-# --- HippOS: our logo in its built-in theme, and its start script ---
-if [ -s "$FILES/hippos-theme-files.txt" ]; then
-    while IFS=$'\t' read -r dest src; do
-        [ -n "$dest" ] && [ -e "$dest" ] && cmp -s "$src" "$dest" && sudo -n rm -f "$dest" 2>/dev/null
-    done < "$FILES/hippos-theme-files.txt"
-fi
+# --- HippOS: the start script earlier versions used for its built-in theme ---
 rm -f "$ES/scripts/start/xcloud-theme-logo.sh"
 
 # --- Launch Single Game: keep it? (the default is keep) ---
