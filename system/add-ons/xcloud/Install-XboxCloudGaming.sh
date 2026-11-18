@@ -325,7 +325,7 @@ fi
 rm -rf "$FILES/theme-installed.txt" "$FILES/theme-backups"
 
 # remove the downloaded browser engine (about 250 MB unpacked)
-rm -rf "$FILES/runtime" "$FILES/runtime.old"
+rm -rf "$FILES/runtime" "$FILES/runtime.old" "$FILES/runtime-shared.json"
 
 # remove the F1 > Applications shortcuts (both places), refresh F1's menu
 rm -f /userdata/system/.local/share/applications/xcloud-xbox-cloud-gaming.desktop \

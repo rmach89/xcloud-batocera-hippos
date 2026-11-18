@@ -118,14 +118,16 @@ def emit(**kw):
 
 def app_running():
     """The Xbox Cloud Gaming app (its browser engine) is open."""
-    me = os.path.join(FILES, "runtime") + "/"
+    # its own engine (runtime/), or an Electron already on the system given our app.asar
+    marks = ((os.path.join(FILES, "runtime") + "/").encode(), os.path.join(FILES, "app.asar").encode())
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue
         try:
             with open(f"/proc/{pid}/cmdline", "rb") as f:
-                if me.encode() in f.read():
-                    return True
+                cmd = f.read()
+            if any(m in cmd for m in marks):
+                return True
         except OSError:
             pass
     return False

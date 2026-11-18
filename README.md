@@ -197,7 +197,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Credits
 
-- The app runs on [Electron](https://github.com/electron/electron) (MIT License), downloaded from Electron's official releases and checked against its published SHA-256 checksums.
+- The app runs on [Electron](https://github.com/electron/electron) (MIT License), downloaded from Electron's official releases and checked against its published SHA-256 checksums. If the system already has Electron (v30 or newer), the app uses that one and downloads nothing.
 - The intro video and sound are original, made for this project.
 - Japanese and Korean text uses parts of Noto Sans CJK (SIL Open Font License 1.1). The controller emoji is from Noto Color Emoji (Apache License 2.0).
 - Batocera, HippOS and EmulationStation are their own projects; this add-on only adds a system to them.

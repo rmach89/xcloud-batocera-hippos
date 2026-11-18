@@ -6,6 +6,17 @@ official GitHub releases, checks it against Electron's published SHA-256
 checksums, unpacks it into ./runtime and puts this project's app
 (app.asar) inside it. No BUA needed.
 
+An Electron that's already on the system (Batocera or HippOS) is used
+instead, and nothing is downloaded: a plain Electron install (one that can
+run any app given to it), new enough for this app (v30 or later), found as
+"electron" on the PATH, in /usr/lib, /usr/share, /usr/local/lib or /opt, in
+another add-on's folder under /userdata/system/add-ons, or given with
+XCLOUD_ELECTRON=/path/to/electron. Its path is kept in
+runtime-shared.json; the app then runs with it, and it's left to whoever
+installed it (Settings > Updates doesn't update it). XCLOUD_OWN_ENGINE=1
+downloads the app's own copy anyway. An Electron with another app packed
+inside it (another add-on's) can't run this one, so it's passed over.
+
   Build-Runtime.py           set up if missing, or refresh the app inside it
   Build-Runtime.py --force   download Electron again (updates it)
   Build-Runtime.py --latest  used by the installer: get the newest Electron if
@@ -15,7 +26,7 @@ checksums, unpacks it into ./runtime and puts this project's app
                              use; it takes over the next time the app opens
                              (used by Settings > Update engine)
 """
-import hashlib, json, os, platform, shutil, stat, sys, tempfile, time, urllib.request, zipfile
+import glob, hashlib, json, os, platform, re, shutil, stat, subprocess, sys, tempfile, time, urllib.request, zipfile
 
 FILES = os.environ.get("XCLOUD_HOME", "/userdata/system/add-ons/xcloud")
 RUNTIME = os.path.join(FILES, "runtime")
@@ -27,6 +38,8 @@ REPO = "electron/electron"
 OFFICIAL = "https://github.com/electron/electron/releases/download/"
 UA = "xcloud-app-installer/1.0"
 NEED_MB = 400  # download (~100 MB) + unpacked engine (~250 MB) + headroom
+SHARED = os.path.join(FILES, "runtime-shared.json")   # an Electron already on the system, used instead
+MIN_MAJOR = 30   # the oldest Electron this app runs on
 
 
 def say(msg):
@@ -75,6 +88,87 @@ def read_stamp():
             return json.load(f)
     except Exception:
         return {}
+
+
+def electron_version(path):
+    """The Electron version of this program ("v38.1.0"), or "" when it isn't Electron."""
+    try:
+        out = subprocess.run([path, "-p", "process.versions.electron"], capture_output=True, text=True, timeout=30,
+                             env=dict(os.environ, ELECTRON_RUN_AS_NODE="1")).stdout.strip()
+    except Exception:
+        return ""
+    return "v" + out if re.fullmatch(r"\d+\.\d+\.\d+\S*", out) else ""
+
+
+def vkey(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+
+def find_existing():
+    """An Electron already on the system that can run this app: (path, version) or None."""
+    if os.environ.get("XCLOUD_OWN_ENGINE"):
+        return None
+    cands = []
+    if os.environ.get("XCLOUD_ELECTRON"):
+        cands.append(os.environ["XCLOUD_ELECTRON"])
+    on_path = shutil.which("electron")
+    if on_path:
+        cands.append(on_path)
+    for pattern in ("/usr/lib/electron*/electron", "/usr/share/electron*/electron", "/usr/local/lib/electron*/electron",
+                    "/opt/electron*/electron", "/opt/*/electron", "/userdata/system/add-ons/*/runtime/electron",
+                    "/userdata/system/add-ons/*/electron/electron"):
+        cands += sorted(glob.glob(pattern))
+    mine = os.path.realpath(FILES) + os.sep
+    seen, best = set(), None
+    for c in cands:
+        real = os.path.realpath(c)
+        if real in seen or real.startswith(mine):
+            continue
+        seen.add(real)
+        if not (os.path.isfile(real) and os.access(real, os.X_OK)):
+            continue
+        with open(real, "rb") as f:
+            script = f.read(2) == b"#!"
+        if not script:
+            # a plain Electron runs the app it's given; one with its own app
+            # packed in (resources/app or app.asar) would run that one instead
+            res = os.path.join(os.path.dirname(real), "resources")
+            if os.path.exists(os.path.join(res, "app.asar")) or os.path.exists(os.path.join(res, "app")):
+                say(f"Passing over {c}: it has another app packed inside it.")
+                continue
+        v = electron_version(c)
+        if not v:
+            continue
+        if vkey(v)[0] < MIN_MAJOR:
+            say(f"Passing over {c}: Electron {v} is older than v{MIN_MAJOR}, which this app needs.")
+            continue
+        if best is None or vkey(v) > vkey(best[1]):
+            best = (c, v)
+    return best
+
+
+def use_existing():
+    """Use an Electron already on the system if there is one: True when it's set up that way."""
+    found = find_existing()
+    if not found:
+        if os.path.exists(SHARED):
+            os.remove(SHARED)
+            say("The Electron used before isn't on the system any more: the app gets its own.")
+        return False
+    path, version = found
+    with open(SHARED, "w", encoding="utf-8") as f:
+        json.dump({"path": path, "electron": version, "found": time.strftime("%Y-%m-%d %H:%M:%S")}, f, indent=2)
+    # the app's own copy isn't needed: its space is given back
+    for d in (RUNTIME, NEXT, RUNTIME + ".old", RUNTIME + ".new"):
+        shutil.rmtree(d, ignore_errors=True)
+    say(f"Using the Electron already on this system: {path} ({version}). Nothing to download.")
+    return True
+
+
+def shared_engine():
+    """The system's Electron the app uses ({"path", "electron"}), or {} when it has its own."""
+    info = read_json(SHARED)
+    return info if info.get("path") and os.access(info["path"], os.X_OK) else {}
 
 
 def install_app_into(runtime_dir):
@@ -166,6 +260,12 @@ def read_json(path):
 
 def check():
     """The installed engine, a downloaded update waiting (if any) and the newest one."""
+    sh = shared_engine()
+    if sh:
+        # someone else's Electron: its version as it is now, and nothing to update here
+        v = electron_version(sh["path"]) or sh.get("electron", "")
+        print(json.dumps({"installed": v, "staged": "", "latest": v, "shared": sh["path"]}), flush=True)
+        return 0
     out = {"installed": read_stamp().get("electron", ""),
            "staged": read_json(os.path.join(NEXT, ".built-from.json")).get("electron", "")
            if os.path.isfile(os.path.join(NEXT, "electron")) else ""}
@@ -176,6 +276,9 @@ def check():
 
 def stage():
     """Download the newest engine into runtime.next; the one in use isn't touched."""
+    if shared_engine():
+        say("The app uses the Electron already on this system; it's updated by whoever installed it.")
+        return 1
     if not os.path.isfile(APP):
         say(f"Missing {APP}.")
         return 1
@@ -207,6 +310,12 @@ def main():
     if "--stage" in sys.argv[1:]:
         return stage()
     force = "--force" in sys.argv[1:]
+    # an Electron already on the system: used, nothing downloaded
+    if not os.path.isfile(APP):
+        say(f"Missing {APP}.")
+        return 1
+    if use_existing():
+        return 0
     if "--latest" in sys.argv[1:] and os.path.isfile(os.path.join(RUNTIME, "electron")):
         installed = read_stamp().get("electron", "")
         try:

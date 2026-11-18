@@ -85,11 +85,23 @@ XCLOUD_UPDATE=no bash install.sh):
   XCLOUD_NO_UPDATE_CHECK=1      skip the check for a newer version
   XCLOUD_UPDATE=yes / no        answer the update question ahead of time
   XCLOUD_SINGLE_LAUNCH=yes / no answer the Launch Single Game question
+  XCLOUD_ELECTRON=/path/electron use that Electron (see below)
+  XCLOUD_OWN_ENGINE=1           download the app's own Electron even when
+                                the system has one
 
 The first install needs internet: it downloads the browser engine the app
 runs on (Electron, about 100 MB, checked against Electron's published
 checksums). If the install was offline, the download happens the first
 time you open the app instead.
+
+Already have Electron on the system (Batocera or HippOS)? Then nothing is
+downloaded: the app runs with that one. It's looked for as "electron" on
+the PATH, in /usr/lib, /usr/share, /usr/local/lib and /opt, and in other
+add-ons' folders; it has to be v30 or newer, and a plain install that runs
+the app it's given (an Electron with another add-on's app packed inside
+can't run this one, so it's passed over). It stays whoever installed it's
+to update: Settings > Updates leaves it alone. If it's removed later, the
+app downloads its own the next time it opens.
 
 
 Using it
@@ -602,6 +614,9 @@ What's new in 1.3.2
   wants to pin one).
 - The HippOS content downloader isn't mentioned any more: it has no
   entry for Xbox Cloud Gaming yet. Install with the one command.
+- An Electron already on the system (v30 or newer, a plain install) is
+  used instead of downloading one, on Batocera and HippOS. Updates leave
+  it to whoever installed it.
 - HippOS: nothing is put in its system area any more. The logo that was
   copied into HippOS's built-in theme with sudo, and the start script
   that put it back, are gone: HippOS's own themes carry the art.

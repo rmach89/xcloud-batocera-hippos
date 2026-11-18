@@ -73,7 +73,8 @@ fi
 
 # The browser engine: only run the (slower) setup step when it's missing or
 # the app inside it is out of date; normally this is skipped.
-if [ ! -x "$RUNTIME/electron" ] || ! cmp -s "$FILES/app.asar" "$RUNTIME/resources/app.asar"; then
+# (with an Electron already on the system, runtime-shared.json, there's nothing to set up)
+if [ ! -f "$FILES/runtime-shared.json" ] && { [ ! -x "$RUNTIME/electron" ] || ! cmp -s "$FILES/app.asar" "$RUNTIME/resources/app.asar"; }; then
     python3 "$FILES/Build-Runtime.py" || { echo "Could not set up the app; see the message above."; exit 1; }
 fi
 

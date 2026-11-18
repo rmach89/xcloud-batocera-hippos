@@ -274,7 +274,9 @@ XCLOUD_SINGLE_LAUNCH="$SINGLE" bash "$FILES/Install-XboxCloudGaming.sh"
 cat "$LOGDIR/xcloud-install.log" 2>/dev/null
 [ -f "$FILES/Uninstall-XboxCloudGaming.sh" ] || fail "Xbox Cloud Gaming didn't install; see above."
 
-if [ -x "$FILES/runtime/electron" ]; then
+if [ -f "$FILES/runtime-shared.json" ]; then
+    say "Using the Electron already on this system: nothing was downloaded for it."
+elif [ -x "$FILES/runtime/electron" ]; then
     # check the same way the app runs: BUA's libraries if BUA is
     # installed, otherwise the stand-in printing library
     if [ -d "$USERDATA/system/add-ons/.dep" ]; then

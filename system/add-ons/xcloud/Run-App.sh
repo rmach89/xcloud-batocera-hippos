@@ -31,6 +31,26 @@ if [ -x "$FILES/runtime.next/electron" ]; then
     fi
 fi
 
+# an Electron already on the system (Build-Runtime.py found it and wrote
+# runtime-shared.json): run the app with it, nothing of our own needed
+APP_ARG=""
+SHARED="$FILES/runtime-shared.json"
+if [ -f "$SHARED" ]; then
+    EXT="$(python3 -I -c 'import json, sys
+try:
+    print(json.load(open(sys.argv[1])).get("path", ""))
+except Exception:
+    pass' "$SHARED" 2>/dev/null)"
+    if [ -n "$EXT" ] && [ -x "$EXT" ]; then
+        BIN="$EXT"; APP_ARG="$FILES/app.asar"; RUNTIME="$FILES"; LIBCHECK="$FILES/.libcheck"
+        echo "Using the Electron already on this system: $EXT"
+    else
+        echo "The Electron this app used ($EXT) isn't on the system any more: setting up the app's own."
+        python3 "$FILES/Build-Runtime.py" || exit 1
+        [ -f "$SHARED" ] && exec bash "$0" "$@"
+    fi
+fi
+
 if [ ! -x "$BIN" ]; then
     echo "Could not find $BIN."
     exit 1
@@ -89,4 +109,4 @@ echo "Device: $(uname -m), $(awk '/MemTotal/ {printf "%.1f GB memory", $2/104857
 ulimit -n 819200 2>/dev/null
 
 cd "$RUNTIME" || exit 1
-"$BIN" --no-sandbox $SCREEN_ARGS "$@"
+"$BIN" --no-sandbox $SCREEN_ARGS $APP_ARG "$@"
