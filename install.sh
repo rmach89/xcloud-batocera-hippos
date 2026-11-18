@@ -194,6 +194,23 @@ for f in "$ROOT/system/add-ons/xcloud/"*; do
 done
 # the full instructions, next to the app
 [ -f "$ROOT/README.txt" ] && cp -f "$ROOT/README.txt" "$FILES/README.txt"
+# The printing library (libcups2): Electron won't start without it, though
+# the app never prints. The app carries a do-nothing stand-in for systems
+# without it (Batocera); when the system, or BUA, already has the real one,
+# the stand-in isn't installed.
+has_libcups() {
+    ldconfig -p 2>/dev/null | grep -q 'libcups\.so\.2 ' && return 0
+    local f
+    for f in /usr/lib/libcups.so.2 /usr/lib/*/libcups.so.2 /lib/libcups.so.2 /lib/*/libcups.so.2 /usr/lib64/libcups.so.2 \
+             "$USERDATA/system/add-ons/.dep/libcups.so.2"; do
+        [ -e "$f" ] && return 0
+    done
+    return 1
+}
+if has_libcups; then
+    rm -rf "$FILES/lib"
+    say "libcups2 is already on this system: the app's stand-in for it isn't installed."
+fi
 # pinned to a tag (XCLOUD_TAG): the app's own updates follow that tag, not main
 if [ -n "$XCLOUD_TAG" ]; then
     echo "tag $XCLOUD_TAG" > "$FILES/update-ref"
@@ -282,7 +299,7 @@ elif [ -x "$FILES/runtime/electron" ]; then
     if [ -d "$USERDATA/system/add-ons/.dep" ]; then
         libpath="$USERDATA/system/add-ons/.dep"
     else
-        libpath="$FILES/lib/$ARCH"
+        libpath="$FILES/lib/$ARCH"   # (not there when the system has libcups2)
     fi
     missing="$(LD_LIBRARY_PATH="$libpath" ldd "$FILES/runtime/electron" 2>/dev/null | grep 'not found')"
     if [ -n "$missing" ]; then

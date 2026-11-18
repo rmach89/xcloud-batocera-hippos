@@ -74,8 +74,13 @@ else
         [ -n "$missing" ] && echo "Missing libraries:" && echo "$missing"
     fi
     if [ "$(cat "$LIBCHECK" 2>/dev/null)" = "stub" ]; then
-        export LD_LIBRARY_PATH="$STUB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-        echo "No BUA: using the stand-in printing library from $STUB."
+        if [ -d "$STUB" ]; then
+            export LD_LIBRARY_PATH="$STUB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            echo "No BUA: using the stand-in printing library from $STUB."
+        else
+            # installed without the stand-in (the system had libcups2 then)
+            echo "libcups2 isn't on this system any more, and the app's stand-in for it wasn't installed: run the installer again."
+        fi
     fi
 fi
 

@@ -617,6 +617,9 @@ What's new in 1.3.2
 - An Electron already on the system (v30 or newer, a plain install) is
   used instead of downloading one, on Batocera and HippOS. Updates leave
   it to whoever installed it.
+- The stand-in printing library (libcups2, which Electron needs though
+  the app never prints) is only installed when the system, or BUA,
+  doesn't have the real one.
 - HippOS: nothing is put in its system area any more. The logo that was
   copied into HippOS's built-in theme with sudo, and the start script
   that put it back, are gone: HippOS's own themes carry the art.
