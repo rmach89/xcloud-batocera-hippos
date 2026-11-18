@@ -2,7 +2,7 @@
 
 Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](https://batocera.org) and [HippOS](https://hippos-linux.org). Pick it, and a fullscreen app opens on [play.xbox.com](https://play.xbox.com), ready for your controller. Your cloud games can sit in EmulationStation's list like any other system, with box art, 3D cases and age ratings.
 
-**[⬇ Install](#install)**: one command, always the newest version · also in **BUA** (Batocera Unofficial Add-ons) and the **HippOS content downloader**
+**[⬇ Install](#install)**: one command, always the newest version · also in **BUA** (Batocera Unofficial Add-ons)
 
 > **Unofficial project, use at your own risk.** Not affiliated with, endorsed by or sponsored by Microsoft or Xbox. Xbox, Xbox Cloud Gaming and Xbox Game Pass are trademarks of the Microsoft group of companies.
 
@@ -68,9 +68,11 @@ bash /tmp/xcloud-install.sh
 
 The installer downloads the newest version straight from this repository's main branch, installs it, and tidies up after itself. Answer its questions, then restart EmulationStation. Xbox Cloud Gaming appears in the carousel.
 
-It's also in **BUA** (Batocera Unofficial Add-ons) and the **HippOS content downloader**: pick **Xbox Cloud Gaming** there. Both run the same installer, so they get the newest version too. In BUA, its questions appear on BUA's screen; on HippOS it asks nothing.
+It's also in **BUA** (Batocera Unofficial Add-ons): pick **Xbox Cloud Gaming** there. BUA runs the same installer, so it gets the newest version too, and the installer's questions appear on BUA's screen. On HippOS the installer asks nothing.
 
 Installed from a `git clone` of this repository? Run `bash install.sh` in it. If main has a newer version than your copy, it offers that one instead.
+
+To install a fixed version instead of the newest (for a distribution that wants to pin one), give its tag: `XCLOUD_TAG=v1.3.2 bash /tmp/xcloud-install.sh`. The app's own updates then follow that tag rather than main.
 
 ## Updating
 
@@ -177,6 +179,10 @@ Settings → Help and maintenance → **Back up settings** saves one file in the
 
 **Will an update lose my sign-ins or settings?**
 No. Updating from Settings or running the installer again keeps sign-ins, profiles, settings and picked games.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ## Help
 

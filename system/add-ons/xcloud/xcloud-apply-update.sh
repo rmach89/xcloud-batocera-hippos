@@ -30,8 +30,10 @@ try:
     print("" if v is None else ("yes" if v else "no"))
 except Exception:
     pass' "$FILES/config.json" 2>/dev/null)"
+# keep a pin to a tag (install.sh with XCLOUD_TAG)
+tag="$(sed -n 's/^tag[[:space:]]\{1,\}\([A-Za-z0-9._-]\{1,\}\).*/\1/p' "$FILES/update-ref" 2>/dev/null | head -n1)"
 say "installing v$v (settings, profiles and sign-ins are kept)"
-XCLOUD_NO_UPDATE_CHECK=1 XCLOUD_SINGLE_LAUNCH="$single" bash "$inst" < /dev/null
+XCLOUD_NO_UPDATE_CHECK=1 XCLOUD_SINGLE_LAUNCH="$single" XCLOUD_TAG="$tag" bash "$inst" < /dev/null
 rc=$?
 rm -rf "$WORK"
 if [ $rc -eq 0 ]; then say "v$v installed; it's used the next time the app opens"

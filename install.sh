@@ -7,6 +7,9 @@
 #     bash /tmp/xcloud-install.sh
 # Run from a copy of the repository (git clone), it installs that copy,
 # after offering the newer one if main has moved on.
+# XCLOUD_TAG=v1.3.2 installs that tagged version instead of main, and keeps
+# the app on it (Settings > Updates then follows the tag, not main): for a
+# distribution that wants to pin a known version.
 # It copies the files into place and installs everything: the xcloud
 # system, the Xbox Cloud Gaming app (downloading the Electron browser
 # engine), Launch Single Game if you want it (it asks), and the shortcuts in
@@ -30,7 +33,7 @@ fail() { echo "[Xbox Cloud Gaming] ERROR: $*" >&2; exit 1; }
 [ -d "$USERDATA/system" ] || fail "This must be run on Batocera or HippOS ($USERDATA/system not found)."
 OS=batocera
 [ -f "${XCLOUD_HIPPOS_VERSION:-/usr/share/hippos/version}" ] && OS=hippos
-# On HippOS the installer asks nothing (its content downloader can't answer):
+# On HippOS the installer asks nothing (so it can also be run by a tool that can't answer):
 # Launch Single Game is left off and a newer version on main, if any, is installed.
 ASK=1
 [ "$OS" = hippos ] && ASK=''
@@ -69,12 +72,17 @@ fi
 # Its version is the one in main's package.json; the whole branch comes as
 # one download (GitHub packs it on request), is unpacked into a temporary
 # folder in /userdata, installed from there and then deleted.
-# XCLOUD_REPO / XCLOUD_BRANCH pick another copy; XCLOUD_VERSION_URL and
-# XCLOUD_PACKAGE_URL point both downloads elsewhere (for testing).
+# XCLOUD_REPO / XCLOUD_BRANCH pick another copy, XCLOUD_TAG a tagged
+# version; XCLOUD_VERSION_URL and XCLOUD_PACKAGE_URL point both downloads
+# elsewhere (for testing).
 REPO="${XCLOUD_REPO:-rmach89/xcloud-batocera-hippos}"
-BRANCH="${XCLOUD_BRANCH:-main}"
+if [ -n "$XCLOUD_TAG" ]; then
+    BRANCH="$XCLOUD_TAG"; REFPATH="refs/tags/$XCLOUD_TAG"
+else
+    BRANCH="${XCLOUD_BRANCH:-main}"; REFPATH="refs/heads/$BRANCH"
+fi
 VER_URL="${XCLOUD_VERSION_URL:-https://raw.githubusercontent.com/$REPO/$BRANCH/system/add-ons/xcloud/app-source/package.json}"
-PKG_URL="${XCLOUD_PACKAGE_URL:-https://codeload.github.com/$REPO/zip/refs/heads/$BRANCH}"
+PKG_URL="${XCLOUD_PACKAGE_URL:-https://codeload.github.com/$REPO/zip/$REFPATH}"
 main_version() {   # the version on main, or nothing (no internet)
     curl -fsSL -m 20 "$VER_URL?t=$(date +%s)" 2>/dev/null | python3 -I -c '
 import json, sys
@@ -186,6 +194,13 @@ for f in "$ROOT/system/add-ons/xcloud/"*; do
 done
 # the full instructions, next to the app
 [ -f "$ROOT/README.txt" ] && cp -f "$ROOT/README.txt" "$FILES/README.txt"
+# pinned to a tag (XCLOUD_TAG): the app's own updates follow that tag, not main
+if [ -n "$XCLOUD_TAG" ]; then
+    echo "tag $XCLOUD_TAG" > "$FILES/update-ref"
+    say "Pinned to $XCLOUD_TAG: Settings > Updates follows that tag, not main."
+else
+    rm -f "$FILES/update-ref"
+fi
 # fix Windows line endings on the installer, in case it was copied from a PC
 tr -d '\r' < "$FILES/Install-XboxCloudGaming.sh" > "$FILES/Install-XboxCloudGaming.sh.tmp" \
     && mv "$FILES/Install-XboxCloudGaming.sh.tmp" "$FILES/Install-XboxCloudGaming.sh"

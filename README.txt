@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.3.1 (November 2026)
+Version 1.3.2 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -62,8 +62,12 @@ temporary folder in /userdata, installs it and deletes the folder again.
 This file is copied next to the app, as
 /userdata/system/add-ons/xcloud/README.txt.
 
-BUA (Batocera Unofficial Add-ons) and the HippOS content downloader run
-the same installer, so they get the newest version too.
+BUA (Batocera Unofficial Add-ons) runs the same installer, so it gets
+the newest version too.
+
+To install a fixed version instead of the newest, give its tag:
+  XCLOUD_TAG=v1.3.2 bash /tmp/xcloud-install.sh
+Settings > Updates then follows that tag rather than main.
 
 Run from a copy of the project (git clone), install.sh installs that
 copy; if main has a newer version, it offers that one instead (Enter =
@@ -469,7 +473,7 @@ carousel opens the app straight away, and closing the app returns to the
 carousel. Without it, the carousel opens Xbox Cloud Gaming's list like
 any other system. It's off unless you choose it, on Batocera and HippOS
 alike; installing again keeps what you chose before. On HippOS the
-installer asks nothing (its content downloader can't answer questions):
+installer asks nothing:
 Launch Single Game is left off, and XCLOUD_SINGLE_LAUNCH=yes bash
 install.sh adds it.
 
@@ -589,6 +593,15 @@ Settings > Save logs for help puts them in one zip for sending.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
+What's new in 1.3.2
+-------------------
+- MIT license (LICENSE in the project).
+- XCLOUD_TAG=v1.3.2 installs a fixed, tagged version instead of main, and
+  Settings > Updates then follows that tag (for a distribution that
+  wants to pin one).
+- The HippOS content downloader isn't mentioned any more: it has no
+  entry for Xbox Cloud Gaming yet. Install with the one command.
+
 What's new in 1.3.1
 -------------------
 - HippOS: installed as root (over SSH, say), the app's files are handed
@@ -600,7 +613,7 @@ What's new in 1.3.0
 -------------------
 - No more zips: install.sh downloads the newest version straight from
   the main branch on GitHub, installs it and tidies up (see Install and
-  update). BUA and the HippOS content downloader run the same installer.
+  update). BUA runs the same installer.
 - Settings > Updates checks the main branch too, so the app is always as
   new as the project.
 - This README is copied next to the app

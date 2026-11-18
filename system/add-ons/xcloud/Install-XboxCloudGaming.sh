@@ -530,7 +530,7 @@ echo "$MODE" > "$FILES/persist-mode"
 
 # --- HippOS: the files belong to the HippOS user ---
 # HippOS runs EmulationStation and its desktop as a normal user, not root.
-# Installed as root (over SSH, or by the content downloader with sudo), the
+# Installed as root (over SSH, or by a tool running it with sudo), the
 # app's files would be root's, and the app couldn't save its settings,
 # profiles, sign-ins or logs. So they're handed to whoever owns
 # /userdata/system (HippOS's user), the same way HippOS's own store does it.
