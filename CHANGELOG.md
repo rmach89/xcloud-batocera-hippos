@@ -1,6 +1,12 @@
 # Changelog
 
-Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. Download them from [Releases](https://github.com/rmach89/xcloud-batocera-hippos/releases).
+Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. The installer always gets the newest one from the main branch (see [Install](README.md#install)).
+
+## 1.3.0
+
+- No more zips: install.sh downloads the newest version straight from the main branch, installs it and tidies up. BUA and the HippOS content downloader run the same installer.
+- Settings > Updates checks the main branch too, so the app is always as new as the project.
+- README.txt is copied next to the app (/userdata/system/add-ons/xcloud/README.txt).
 
 ## 1.2.9
 

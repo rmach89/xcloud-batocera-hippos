@@ -3642,12 +3642,13 @@ function checkPadBatteries() {
   }
 }
 
-// ---------- Updates: the app (GitHub Releases) and the browser engine ----------
+// ---------- Updates: the app (GitHub, main branch) and the browser engine ----------
 // One press of Settings > Updates checks both and gets whatever is newer, by
 // itself:
-//  - the app: the newest Release of the app's GitHub repository (only
-//    published Releases, never work in progress). Its zip is downloaded,
-//    unpacked and checked into update-staged/; the next time the app
+//  - the app: the version on the main branch of the app's GitHub
+//    repository (its package.json). When it's newer, the branch is
+//    downloaded (GitHub packs it as one zip), unpacked and checked into
+//    update-staged/; the next time the app
 //    closes, Launch-XboxCloudGaming.sh runs that version's installer in the
 //    background (xcloud-apply-update.sh), which keeps config.json, the
 //    profiles, sign-ins, PIN and picked games, and also brings the newest
@@ -3657,7 +3658,9 @@ function checkPadBatteries() {
 //    published checksums); Run-App.sh switches to it the next time.
 // Anything that fails leaves the app as it was; every step is in the log.
 const UPDATE_REPO = process.env.XCLOUD_REPO || 'rmach89/xcloud-batocera-hippos';
-const RELEASES_URL = process.env.XCLOUD_RELEASES_URL || `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+const UPDATE_BRANCH = process.env.XCLOUD_BRANCH || 'main';
+const VERSION_URL = process.env.XCLOUD_VERSION_URL || `https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_BRANCH}/system/add-ons/xcloud/app-source/package.json`;
+const PACKAGE_URL = process.env.XCLOUD_PACKAGE_URL || `https://codeload.github.com/${UPDATE_REPO}/zip/refs/heads/${UPDATE_BRANCH}`;
 const UPDATE_STAGED = path.join(HOME, 'update-staged');
 let upd = { state: 'idle' };
 function updStatus(st) {
@@ -3692,12 +3695,12 @@ function runBuild(args, onLine, done) {
 function stagedAppVersion() {
   try { return fs.readFileSync(path.join(UPDATE_STAGED, 'ready'), 'utf8').trim(); } catch (e) { return ''; }
 }
-// the newest Release: { version, zip } (null with a reason when it can't be read)
+// the newest version, on main: { version, zip } ({ error } when it can't be read)
 function latestRelease() {
   return new Promise(resolve => {
     let req;
-    try { req = net.request({ url: RELEASES_URL, method: 'GET' }); } catch (e) { resolve({ error: e.message }); return; }
-    req.setHeader('Accept', 'application/vnd.github+json');
+    try { req = net.request({ url: VERSION_URL + (VERSION_URL.includes('?') ? '&' : '?') + 't=' + Date.now(), method: 'GET' }); } catch (e) { resolve({ error: e.message }); return; }
+    req.setHeader('Cache-Control', 'no-cache');
     req.setHeader('User-Agent', 'xcloud-batocera-hippos/' + VERSION);
     const timer = setTimeout(() => { try { req.abort(); } catch (e) { /* ignore */ } resolve({ error: 'timed out' }); }, 20000);
     req.on('response', res => {
@@ -3705,13 +3708,11 @@ function latestRelease() {
       res.on('data', d => { body += d; });
       res.on('end', () => {
         clearTimeout(timer);
-        if (res.statusCode !== 200) { resolve({ error: res.statusCode === 404 ? 'no release published yet (HTTP 404)' : `HTTP ${res.statusCode}` }); return; }
+        if (res.statusCode !== 200) { resolve({ error: `HTTP ${res.statusCode}` }); return; }
         try {
-          const r = JSON.parse(body);
-          const version = String(r.tag_name || '').replace(/^[vV]/, '');
-          const asset = (r.assets || []).find(a => /\.zip$/i.test(String(a.name || '')));
-          if (!version || !asset) { resolve({ error: 'the newest release has no version tag or no zip' }); return; }
-          resolve({ version, zip: asset.browser_download_url });
+          const version = String(JSON.parse(body).version || '').trim();
+          if (!/^\d+\.\d+\.\d+/.test(version)) { resolve({ error: 'main\'s package.json has no version' }); return; }
+          resolve({ version, zip: PACKAGE_URL });
         } catch (e) { resolve({ error: 'GitHub\'s answer couldn\'t be read' }); }
       });
     });
@@ -3731,7 +3732,8 @@ function download(url, dest, onPct) {
       try { out = fs.createWriteStream(dest); } catch (e) { reject(e); return; }
       res.on('data', d => {
         out.write(d); got += d.length;
-        const pct = total ? Math.floor(got * 100 / total) : 0;
+        // (GitHub packs the branch as it sends it, without saying its size: then about 15 MB is assumed)
+        const pct = total ? Math.floor(got * 100 / total) : Math.min(99, Math.floor(got * 100 / 15e6));
         if (pct !== last) { last = pct; onPct(pct); }
       });
       res.on('end', () => out.end(() => (total && got < total ? reject(new Error(`cut off at ${Math.floor(got * 100 / total)}%`)) : resolve(got))));
@@ -3756,7 +3758,7 @@ async function stageApp(rel, onPct) {
   } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw new Error(`app download failed (${e.message})`); }
   try { unzip(zip, path.join(work, 'pkg')); } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw new Error('the zip couldn\'t be unpacked'); }
   fs.rmSync(zip, { force: true });
-  // the package: install.sh next to system/add-ons/xcloud with the app in it, of the version the release says
+  // the package: install.sh next to system/add-ons/xcloud with the app in it, of the version main said (or newer, if main moved on meanwhile)
   const find = (dir, depth) => {
     if (fs.existsSync(path.join(dir, 'install.sh'))) return dir;
     if (depth <= 0) return '';
@@ -3766,10 +3768,11 @@ async function stageApp(rel, onPct) {
   const root = find(path.join(work, 'pkg'), 2);
   let pv = '';
   try { pv = JSON.parse(fs.readFileSync(path.join(root, 'system/add-ons/xcloud/app-source/package.json'), 'utf8')).version; } catch (e) { pv = ''; }
-  if (!root || !fs.existsSync(path.join(root, 'system/add-ons/xcloud/app.asar')) || pv !== rel.version) {
+  if (!root || !fs.existsSync(path.join(root, 'system/add-ons/xcloud/app.asar')) || !pv || newer(rel.version, pv)) {
     fs.rmSync(work, { recursive: true, force: true });
-    throw new Error(`the zip didn't look right (${!root ? 'no install.sh' : pv !== rel.version ? `it holds v${pv || '?'}, not v${rel.version}` : 'no app.asar'})`);
+    throw new Error(`the download didn't look right (${!root ? 'no install.sh' : !pv || newer(rel.version, pv) ? `it holds v${pv || '?'}, not v${rel.version}` : 'no app.asar'})`);
   }
+  if (pv !== rel.version) { log(`updates: main moved on meanwhile: v${pv} downloaded`); rel.version = pv; }
   fs.writeFileSync(path.join(work, 'ready'), rel.version + '\n');
   fs.rmSync(UPDATE_STAGED, { recursive: true, force: true });
   fs.renameSync(work, UPDATE_STAGED);
@@ -3795,7 +3798,7 @@ async function checkForUpdates() {
   if (upd.state === 'checking' || upd.state === 'getting') return;
   const engine = 'v' + process.versions.electron;
   updStatus({ state: 'checking' });
-  log(`updates: checking (app v${VERSION} on GitHub ${UPDATE_REPO}, engine ${engine} on Electron)`);
+  log(`updates: checking (app v${VERSION} on GitHub ${UPDATE_REPO} ${UPDATE_BRANCH}, engine ${engine} on Electron)`);
   const [rel, eng] = await Promise.all([latestRelease(), engineCheck()]);
   if (rel.error) log(`updates: couldn't reach GitHub (${rel.error})`);
   if (eng.error) log(`updates: couldn't check the engine (${eng.error})`);

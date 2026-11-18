@@ -66,8 +66,8 @@ body:
       options:
         - BUA
         - HippOS content downloader
-        - The zip from Releases
-        - install.sh on its own
+        - The installer (install.sh)
+        - A git clone of this repository
   - type: textarea
     id: logs
     attributes:

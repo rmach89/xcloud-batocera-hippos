@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.2.9 (November 2026)
+Version 1.3.0 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -50,22 +50,26 @@ What you need
 
 Install and update
 ------------------
-1. Copy the "Xbox Cloud Gaming" folder to the top of the share folder,
-   so it's at /userdata/Xbox Cloud Gaming.
-2. Open a terminal (F1 > Applications > xterm, or SSH) and run:
-     bash "/userdata/Xbox Cloud Gaming/install.sh"
-3. Answer its questions, then restart EmulationStation
+1. Open a terminal (F1 > Applications > xterm, or SSH) and run:
+     curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
+     bash /tmp/xcloud-install.sh
+2. Answer its questions, then restart EmulationStation
    (Main Menu > Quit > Restart EmulationStation).
 
-Or with just the installer: install.sh also works on its own, with
-nothing else next to it. It then downloads the newest release from
-GitHub, unpacks it into /userdata/Xbox Cloud Gaming and installs it:
-  curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
-  bash /tmp/xcloud-install.sh
+The installer downloads the newest version straight from the project's
+main branch on GitHub (github.com/rmach89/xcloud-batocera-hippos) into a
+temporary folder in /userdata, installs it and deletes the folder again.
+This file is copied next to the app, as
+/userdata/system/add-ons/xcloud/README.txt.
 
-Before installing, the installer checks GitHub for a newer version and
-offers to download and install it instead (Enter = yes). With no
-internet it installs the version you ran.
+BUA (Batocera Unofficial Add-ons) and the HippOS content downloader run
+the same installer, so they get the newest version too.
+
+Run from a copy of the project (git clone), install.sh installs that
+copy; if main has a newer version, it offers that one instead (Enter =
+yes). With no internet it installs the copy you ran.
+Older versions came as a zip unpacked into /userdata/Xbox Cloud Gaming;
+that folder isn't needed any more and can be deleted.
 
 It also asks whether to install Launch Single Game (see below).
 
@@ -356,8 +360,8 @@ The rows are grouped in sections:
                              app then closes; open it again. On another
                              machine each profile signs in to Xbox again
   Updates                    shows the app and engine versions. One press
-                             checks GitHub for a newer app (published
-                             Releases only) and Electron for a newer
+                             checks GitHub for a newer app (the main
+                             branch) and Electron for a newer
                              engine, and gets whatever is newer by itself.
                              It's used the next time the app opens: a new
                              app version is installed in the background
@@ -585,6 +589,16 @@ Settings > Save logs for help puts them in one zip for sending.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
+What's new in 1.3.0
+-------------------
+- No more zips: install.sh downloads the newest version straight from
+  the main branch on GitHub, installs it and tidies up (see Install and
+  update). BUA and the HippOS content downloader run the same installer.
+- Settings > Updates checks the main branch too, so the app is always as
+  new as the project.
+- This README is copied next to the app
+  (/userdata/system/add-ons/xcloud/README.txt).
+
 What's new in 1.2.9
 -------------------
 - Settings > Controller > Each controller: a stick dead zone, its own
@@ -757,7 +771,6 @@ What's new in 1.1.32
 
 1.1.30: new home on GitHub; the installer checks it for a newer version
 before installing.
-Earlier changes are listed in the Releases on the home page.
 
 
 Credits and trademarks

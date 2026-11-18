@@ -2,7 +2,7 @@
 
 Play **Xbox Cloud Gaming** from the EmulationStation carousel on [Batocera](https://batocera.org) and [HippOS](https://hippos-linux.org). Pick it, and a fullscreen app opens on [play.xbox.com](https://play.xbox.com), ready for your controller. Your cloud games can sit in EmulationStation's list like any other system, with box art, 3D cases and age ratings.
 
-**[⬇ Download the latest release](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)** · also available in **BUA** (Batocera Unofficial Add-ons) and the **HippOS content downloader**
+**[⬇ Install](#install)**: one command, always the newest version · also in **BUA** (Batocera Unofficial Add-ons) and the **HippOS content downloader**
 
 > **Unofficial project, use at your own risk.** Not affiliated with, endorsed by or sponsored by Microsoft or Xbox. Xbox, Xbox Cloud Gaming and Xbox Game Pass are trademarks of the Microsoft group of companies.
 
@@ -59,41 +59,23 @@ What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
-There are four ways to install it. All of them get the newest release from here.
-
-### From BUA (Batocera Unofficial Add-ons)
-
-Xbox Cloud Gaming is now in **BUA**. Open BUA on your Batocera, pick **Xbox Cloud Gaming** from its list and install it. BUA runs this project's installer, which downloads the newest release from here, so there's nothing else to download. The installer's questions appear on BUA's screen; answer them, then restart EmulationStation.
-
-### From the HippOS content downloader
-
-On HippOS, Xbox Cloud Gaming is in the **content downloader**. Pick **Xbox Cloud Gaming** there and install it. It gets the newest release from here, then answer the installer's questions and restart EmulationStation.
-
-### From the zip
-
-1. Download the newest zip from **[Releases](https://github.com/rmach89/xcloud-batocera-hippos/releases/latest)**.
-2. Unzip it into the share folder (`/userdata`, called "share" on the network). That gives you `/userdata/Xbox Cloud Gaming`.
-3. Open a terminal (on Batocera, F1 → Applications → xterm; or SSH in) and run:
-   ```bash
-   bash "/userdata/Xbox Cloud Gaming/install.sh"
-   ```
-4. Answer its questions, then restart EmulationStation. Xbox Cloud Gaming appears in the carousel.
-
-The installer checks this repository first. If a newer release is out, it offers to download and install that one instead.
-
-### With just the installer
-
-`install.sh` also works on its own. With nothing else next to it, it downloads the newest release from here, unpacks it into `/userdata/Xbox Cloud Gaming` and installs it:
+Open a terminal on Batocera or HippOS (on Batocera, F1 → Applications → xterm, or SSH in) and run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
 bash /tmp/xcloud-install.sh
 ```
 
+The installer downloads the newest version straight from this repository's main branch, installs it, and tidies up after itself. Answer its questions, then restart EmulationStation. Xbox Cloud Gaming appears in the carousel.
+
+It's also in **BUA** (Batocera Unofficial Add-ons) and the **HippOS content downloader**: pick **Xbox Cloud Gaming** there. Both run the same installer, so they get the newest version too. In BUA, its questions appear on BUA's screen; on HippOS it asks nothing.
+
+Installed from a `git clone` of this repository? Run `bash install.sh` in it. If main has a newer version than your copy, it offers that one instead.
+
 ## Updating
 
-- **From the app:** Settings → Help and maintenance → **Updates**. One press checks for a newer app and a newer browser engine, and downloads whichever is newer. The new version is installed when you close the app, and your sign-ins, profiles, settings and picked games are kept. If anything fails, nothing changes, and the log says why.
-- **Or run the installer again.** To skip its update check: `XCLOUD_NO_UPDATE_CHECK=1 bash install.sh`. To answer it ahead of time: `XCLOUD_UPDATE=yes` (or `no`).
+- **From the app:** Settings → Help and maintenance → **Updates**. One press checks this repository's main branch for a newer app and Electron for a newer browser engine, and downloads whichever is newer. The new version is installed when you close the app, and your sign-ins, profiles, settings and picked games are kept. If anything fails, nothing changes, and the log says why.
+- **Or run the installer again** (the two lines above). It always gets the newest version.
 
 ## Controls
 

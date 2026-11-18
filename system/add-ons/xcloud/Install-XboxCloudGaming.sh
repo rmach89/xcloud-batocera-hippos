@@ -5,10 +5,10 @@
 # sign-in only), installs Launch Single Game, and adds two shortcuts to
 # F1 > Applications ("Xbox Cloud Gaming" and "Uninstall Xbox Cloud
 # Gaming"). It puts nothing in the Ports menu (and clears entries older
-# versions left there). Run by install.sh:
-#     bash "/userdata/Xbox Cloud Gaming/install.sh"
+# versions left there). Run by install.sh, which downloads the newest
+# version from GitHub and copies it into place first.
 #
-# It uses the files in /userdata/system/add-ons/xcloud/ (from the zip):
+# It uses the files in /userdata/system/add-ons/xcloud/ (put there by install.sh):
 #   xcloud.png  xcloud1.png  xcloud-background.jpg (optional)
 #   es_systems_xcloud.cfg  gamelist.xml
 #   Launch-XboxCloudGaming.sh  Build-Runtime.py  config.json  app.asar
@@ -52,7 +52,7 @@ for f in xcloud.png xcloud-hippos.png xcloud-hippos-logo.sh xcloud-apply-update.
 done
 if [ -n "$missing" ]; then
     echo "Install failed: missing from $FILES:$missing"
-    echo "Copy the zip's 'system' folder onto the Batocera share, then run this again."
+    echo "Run install.sh again to download them (see README.txt)."
     exit 1
 fi
 

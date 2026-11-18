@@ -1,12 +1,12 @@
 #!/bin/bash
 # One-step installer for Xbox Cloud Gaming on Batocera (and HippOS).
-# Run it from the extracted zip folder in a terminal (F1 > Applications >
-# xterm, or SSH):
-#     bash "/userdata/Xbox Cloud Gaming/install.sh"
-# Or on its own, with nothing else next to it: it then downloads the newest
-# release from GitHub into /userdata/Xbox Cloud Gaming and installs that:
+# Run it on its own in a terminal (F1 > Applications > xterm, or SSH): it
+# downloads the newest version straight from the project's main branch on
+# GitHub and installs that, so it's always up to date:
 #     curl -fsSL https://raw.githubusercontent.com/rmach89/xcloud-batocera-hippos/main/install.sh -o /tmp/xcloud-install.sh
 #     bash /tmp/xcloud-install.sh
+# Run from a copy of the repository (git clone), it installs that copy,
+# after offering the newer one if main has moved on.
 # It copies the files into place and installs everything: the xcloud
 # system, the Xbox Cloud Gaming app (downloading the Electron browser
 # engine), Launch Single Game if you want it (it asks), and the shortcuts in
@@ -31,7 +31,7 @@ fail() { echo "[Xbox Cloud Gaming] ERROR: $*" >&2; exit 1; }
 OS=batocera
 [ -f "${XCLOUD_HIPPOS_VERSION:-/usr/share/hippos/version}" ] && OS=hippos
 # On HippOS the installer asks nothing (its content downloader can't answer):
-# Launch Single Game is left off and a newer release, if any, is installed.
+# Launch Single Game is left off and a newer version on main, if any, is installed.
 ASK=1
 [ "$OS" = hippos ] && ASK=''
 can_ask() { [ -n "$ASK" ] && [ -t 0 ]; }
@@ -65,55 +65,59 @@ if [ -n "$mem_mb" ] && [ "$mem_mb" -lt 1800 ]; then
     say "It installs anyway; see Compatibility in README.txt."
 fi
 
-# --- on its own: download the newest release and install that ---
-# It's unpacked into /userdata/Xbox Cloud Gaming, the same as unzipping it
-# yourself, and its installer runs from there (asking its questions in this
-# terminal, even when this script was piped into bash).
+# --- where the newest version comes from: the main branch on GitHub ---
+# Its version is the one in main's package.json; the whole branch comes as
+# one download (GitHub packs it on request), is unpacked into a temporary
+# folder in /userdata, installed from there and then deleted.
+# XCLOUD_REPO / XCLOUD_BRANCH pick another copy; XCLOUD_VERSION_URL and
+# XCLOUD_PACKAGE_URL point both downloads elsewhere (for testing).
 REPO="${XCLOUD_REPO:-rmach89/xcloud-batocera-hippos}"
-if [ -n "$STANDALONE" ]; then
-    command -v curl >/dev/null 2>&1 || fail "Nothing to install next to this script, and curl isn't here to download it. Download the zip from https://github.com/$REPO/releases/latest instead."
-    say "No package next to this installer: getting the newest version from GitHub..."
-    rel_json="$(curl -fsSL -m 20 -H 'Accept: application/vnd.github+json' "${XCLOUD_RELEASE_API:-https://api.github.com/repos/$REPO/releases/latest}" 2>/dev/null)"
-    read -r REL_VER REL_ZIP < <(printf '%s' "$rel_json" | python3 -c '
+BRANCH="${XCLOUD_BRANCH:-main}"
+VER_URL="${XCLOUD_VERSION_URL:-https://raw.githubusercontent.com/$REPO/$BRANCH/system/add-ons/xcloud/app-source/package.json}"
+PKG_URL="${XCLOUD_PACKAGE_URL:-https://codeload.github.com/$REPO/zip/refs/heads/$BRANCH}"
+main_version() {   # the version on main, or nothing (no internet)
+    curl -fsSL -m 20 "$VER_URL?t=$(date +%s)" 2>/dev/null | python3 -I -c '
 import json, sys
 try:
-    r = json.load(sys.stdin)
+    print(str(json.load(sys.stdin).get("version", "")).strip())
 except Exception:
-    sys.exit(0)
-tag = str(r.get("tag_name", "")).lstrip("vV")
-zips = [a.get("browser_download_url", "") for a in r.get("assets", []) if str(a.get("name", "")).lower().endswith(".zip")]
-if tag and zips:
-    print(tag, zips[0])
-' 2>/dev/null)
-    [ -n "$REL_ZIP" ] || fail "Couldn't get the newest release from GitHub (no internet, or no release with a zip yet). Nothing was installed."
-    say "Downloading v$REL_VER..."
-    TMPD="$(mktemp -d "$USERDATA/.xcloud-download.XXXXXX" 2>/dev/null)" || fail "Couldn't make a folder in $USERDATA to download into."
-    if ! curl -fL -m 900 --progress-bar -o "$TMPD/package.zip" "$REL_ZIP" \
-       || ! python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$TMPD/package.zip" "$TMPD/x" 2>/dev/null; then
-        rm -rf "$TMPD"; fail "Couldn't download or unpack v$REL_VER. Nothing was installed."
-    fi
-    NEW_INSTALL="$(find "$TMPD/x" -maxdepth 3 -name install.sh -path '*/install.sh' | head -n1)"
-    PKG="$(dirname "$NEW_INSTALL" 2>/dev/null)"
-    if [ -z "$NEW_INSTALL" ] || [ ! -f "$PKG/system/add-ons/xcloud/app.asar" ]; then
-        rm -rf "$TMPD"; fail "The download didn't look like an Xbox Cloud Gaming package. Nothing was installed."
-    fi
-    DEST="$USERDATA/Xbox Cloud Gaming"
-    rm -rf "$DEST" && mv "$PKG" "$DEST" || { rm -rf "$TMPD"; fail "Couldn't put the package in $DEST."; }
-    rm -rf "$TMPD"
-    say "Unpacked v$REL_VER into $DEST. Running its installer..."
+    pass' 2>/dev/null
+}
+fetch_main() {   # fetch_main <empty dir>: downloads and unpacks main there; prints its package folder
+    curl -fL -m 900 --progress-bar -o "$1/package.zip" "$PKG_URL" || return 1
+    python3 -I -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1/package.zip" "$1/x" 2>/dev/null || return 1
+    rm -f "$1/package.zip"
+    local inst; inst="$(find "$1/x" -maxdepth 3 -name install.sh | head -n1)"
+    [ -n "$inst" ] && [ -f "$(dirname "$inst")/system/add-ons/xcloud/app.asar" ] || return 1
+    dirname "$inst"
+}
+run_installer() {   # run_installer <package folder>: its own installer, asking in this terminal
     if [ -n "$ASK" ] && [ -z "$BUA" ] && [ ! -t 0 ] && ( : < /dev/tty ) 2>/dev/null; then
-        XCLOUD_NO_UPDATE_CHECK=1 bash "$DEST/install.sh" < /dev/tty
+        XCLOUD_NO_UPDATE_CHECK=1 bash "$1/install.sh" < /dev/tty
     else
-        XCLOUD_NO_UPDATE_CHECK=1 bash "$DEST/install.sh"
+        XCLOUD_NO_UPDATE_CHECK=1 bash "$1/install.sh"
     fi
-    exit $?
+}
+
+# --- on its own: download the newest version and install that ---
+if [ -n "$STANDALONE" ]; then
+    command -v curl >/dev/null 2>&1 || fail "curl is needed to download Xbox Cloud Gaming and wasn't found. Nothing was installed."
+    say "Getting the newest version from GitHub ($REPO, $BRANCH)..."
+    MAIN_VER="$(main_version)"
+    [ -n "$MAIN_VER" ] && say "Newest version: v$MAIN_VER. Downloading..."
+    TMPD="$(mktemp -d "$USERDATA/.xcloud-download.XXXXXX" 2>/dev/null)" || fail "Couldn't make a folder in $USERDATA to download into."
+    PKG="$(fetch_main "$TMPD")" || { rm -rf "$TMPD"; fail "Couldn't download or unpack the newest version (no internet, or GitHub didn't answer). Nothing was installed."; }
+    say "Downloaded. Running its installer..."
+    run_installer "$PKG"; rc=$?
+    rm -rf "$TMPD"
+    exit $rc
 fi
 
 # --- a newer version on GitHub? ---
-# The app's home: github.com/rmach89/xcloud-batocera-hippos. Each version
-# is a Release there with its zip. If a newer one than this package is out,
-# it's offered (downloaded, unpacked and its installer run instead). No
-# internet, or GitHub not answering: this package installs as usual.
+# The app's home: github.com/rmach89/xcloud-batocera-hippos. If main holds
+# a newer version than this copy, it's offered (downloaded, unpacked and its
+# installer run instead). No internet, or GitHub not answering: this copy
+# installs as usual.
 # XCLOUD_NO_UPDATE_CHECK=1 skips the check; XCLOUD_UPDATE=yes / no answers
 # the question ahead of time.
 THIS_VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/system/add-ons/xcloud/app-source/package.json" 2>/dev/null | head -n1)"
@@ -122,20 +126,9 @@ newer_than() {   # is $1 a later version than $2?
 }
 if [ -z "$XCLOUD_NO_UPDATE_CHECK" ] && [ -n "$THIS_VERSION" ] && command -v curl >/dev/null 2>&1; then
     say "This package: v$THIS_VERSION. Checking GitHub for a newer version..."
-    latest_json="$(curl -fsSL -m 15 -H 'Accept: application/vnd.github+json' "${XCLOUD_RELEASE_API:-https://api.github.com/repos/$REPO/releases/latest}" 2>/dev/null)"
-    read -r LATEST LATEST_ZIP < <(printf '%s' "$latest_json" | python3 -c '
-import json, sys
-try:
-    r = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-tag = str(r.get("tag_name", "")).lstrip("vV")
-zips = [a.get("browser_download_url", "") for a in r.get("assets", []) if str(a.get("name", "")).lower().endswith(".zip")]
-if tag and zips:
-    print(tag, zips[0])
-' 2>/dev/null)
+    LATEST="$(main_version)"
     if [ -z "$LATEST" ]; then
-        say "Couldn't reach GitHub (or no release there yet): installing this package."
+        say "Couldn't reach GitHub: installing this package."
     elif newer_than "$LATEST" "$THIS_VERSION"; then
         say "A newer version is out: v$LATEST (this package is v$THIS_VERSION)."
         GET="${XCLOUD_UPDATE:-}"
@@ -154,19 +147,13 @@ if tag and zips:
         fi
         if [ "$GET" = yes ]; then
             TMPD="$(mktemp -d "$USERDATA/.xcloud-update.XXXXXX" 2>/dev/null)"
-            if [ -n "$TMPD" ] && curl -fL -m 600 --progress-bar -o "$TMPD/update.zip" "$LATEST_ZIP" \
-               && python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$TMPD/update.zip" "$TMPD/x" 2>/dev/null; then
-                NEW_INSTALL="$(find "$TMPD/x" -maxdepth 3 -name install.sh -path '*/install.sh' | head -n1)"
-                if [ -n "$NEW_INSTALL" ] && [ -f "$(dirname "$NEW_INSTALL")/system/add-ons/xcloud/app.asar" ]; then
-                    say "Running the v$LATEST installer..."
-                    XCLOUD_NO_UPDATE_CHECK=1 bash "$NEW_INSTALL"; rc=$?
-                    rm -rf "$TMPD"
-                    exit $rc
-                fi
-                say "The download didn't look like an Xbox Cloud Gaming package: installing this one instead."
-            else
-                say "Couldn't download v$LATEST: installing this package instead."
+            if [ -n "$TMPD" ] && PKG="$(fetch_main "$TMPD")"; then
+                say "Running the v$LATEST installer..."
+                run_installer "$PKG"; rc=$?
+                rm -rf "$TMPD"
+                exit $rc
             fi
+            say "Couldn't download v$LATEST: installing this package instead."
             [ -n "$TMPD" ] && rm -rf "$TMPD"
         fi
     else
@@ -197,7 +184,9 @@ for f in "$ROOT/system/add-ons/xcloud/"*; do
     fi
     cp -rf "$f" "$FILES/" || fail "Could not copy $name."
 done
-# fix Windows line endings on the installer, in case the zip was unpacked on a PC
+# the full instructions, next to the app
+[ -f "$ROOT/README.txt" ] && cp -f "$ROOT/README.txt" "$FILES/README.txt"
+# fix Windows line endings on the installer, in case it was copied from a PC
 tr -d '\r' < "$FILES/Install-XboxCloudGaming.sh" > "$FILES/Install-XboxCloudGaming.sh.tmp" \
     && mv "$FILES/Install-XboxCloudGaming.sh.tmp" "$FILES/Install-XboxCloudGaming.sh"
 
