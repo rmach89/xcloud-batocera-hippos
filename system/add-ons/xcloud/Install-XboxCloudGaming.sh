@@ -208,7 +208,7 @@ THEME_DIRS=("$THEMES"/* /userdata/themes/*)
 if [ "$OS" = hippos ]; then
     # system themes are read-only for the HippOS user and replaced by updates
     THEME_DIRS=(/userdata/themes/*)
-    echo "HippOS: themes in /userdata/themes get the carousel art here; HippOS's built-in theme is handled below."
+    echo "HippOS: themes in /userdata/themes get the carousel art; HippOS's built-in themes are left to HippOS."
 fi
 for theme in "${THEME_DIRS[@]}"; do
     [ -d "$theme" ] || continue
