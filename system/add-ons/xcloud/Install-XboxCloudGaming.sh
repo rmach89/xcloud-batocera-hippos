@@ -528,6 +528,35 @@ CUSTOM_EOF
 fi
 echo "$MODE" > "$FILES/persist-mode"
 
+# --- HippOS: the files belong to the HippOS user ---
+# HippOS runs EmulationStation and its desktop as a normal user, not root.
+# Installed as root (over SSH, or by the content downloader with sudo), the
+# app's files would be root's, and the app couldn't save its settings,
+# profiles, sign-ins or logs. So they're handed to whoever owns
+# /userdata/system (HippOS's user), the same way HippOS's own store does it.
+# XCLOUD_OWNER=uid:gid picks the owner instead.
+if [ "$OS" = hippos ] && [ "$(id -u)" = 0 ]; then
+    OWNER="${XCLOUD_OWNER:-$(stat -c '%u:%g' /userdata/system 2>/dev/null)}"
+    if [ -z "$OWNER" ] || [ "$OWNER" = "0:0" ]; then
+        OWNER="$(id -u hippos 2>/dev/null):$(id -g hippos 2>/dev/null)"
+    fi
+    if [ "$OWNER" != ":" ] && [ "$OWNER" != "0:0" ]; then
+        for p in "$FILES" "$ROMS" "$ES/es_systems_xcloud.cfg" "$LS_SCRIPT" "$LS_ARM" "$HIPPOS_START" "$LIST" \
+                 "$LOGDIR"/xcloud*.log "$APPS"/xcloud-*.desktop "$DESK_APPS"/xcloud-*.desktop \
+                 /userdata/themes/*/art/xcloud* /userdata/themes/*/art/logos/xcloud*; do
+            [ -e "$p" ] && chown -R "$OWNER" "$p" 2>/dev/null
+        done
+        # folders made along the way for them, if they came out as root's
+        for d in /userdata/system/add-ons "$LOGDIR" "$LS_DIR" "$LS_DIR/game-selected" "$LS_DIR/system-selected" "$LS_DIR/start" \
+                 /userdata/system/.local /userdata/system/.local/share "$APPS" /userdata/.local /userdata/.local/share "$DESK_APPS"; do
+            [ -d "$d" ] && [ "$(stat -c %u "$d" 2>/dev/null)" = 0 ] && chown "$OWNER" "$d" 2>/dev/null
+        done
+        echo "HippOS: the app's files belong to the HippOS user ($OWNER), who runs EmulationStation."
+    else
+        echo "HippOS: couldn't tell which user runs EmulationStation; the files stay root's."
+    fi
+fi
+
 echo "Installed. Restart EmulationStation to see Xbox Cloud Gaming in the carousel."
 echo "To remove it later: F1 > Applications > Xbox Cloud Gaming Uninstaller,"
 echo "or run: bash /userdata/system/add-ons/xcloud/uninstall.sh"

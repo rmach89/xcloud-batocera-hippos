@@ -2,6 +2,10 @@
 
 Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. The installer always gets the newest one from the main branch (see [Install](README.md#install)).
 
+## 1.3.1
+
+- HippOS: installed as root (over SSH, say), the app's files are handed to HippOS's own user, who runs EmulationStation, so the app can save its settings, profiles, sign-ins and logs. Installed that way before? Run the installer once more to fix it.
+
 ## 1.3.0
 
 - No more zips: install.sh downloads the newest version straight from the main branch, installs it and tidies up. BUA and the HippOS content downloader run the same installer.

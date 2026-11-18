@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.3.0 (November 2026)
+Version 1.3.1 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -588,6 +588,13 @@ Settings > Save logs for help puts them in one zip for sending.
   app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.3.1
+-------------------
+- HippOS: installed as root (over SSH, say), the app's files are handed
+  to HippOS's own user, who runs EmulationStation, so the app can save
+  its settings, profiles, sign-ins and logs. Installed that way before?
+  Run the installer once more to fix it.
 
 What's new in 1.3.0
 -------------------
