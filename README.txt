@@ -506,11 +506,13 @@ there, so the app puts them back as links at every boot:
 xcloud-boot.log says what was linked.
 
 On HippOS everything stays in /userdata, and nothing in HippOS's system
-area is changed. HippOS's built-in themes show their own Xbox Cloud
-Gaming art (or its name, until they have some); themes you add in
-/userdata/themes get the logo from the installer.
+area is changed. HippOS's built-in themes ship their own Xbox Cloud
+Gaming art; themes you add in /userdata/themes get our logo from the
+installer, and a theme added later gets it the next time EmulationStation
+starts (a small start script in configs/emulationstation/scripts/start
+adds any logo that's missing and never replaces a file).
 
-Installed a new theme? Run install.sh again to give it the logo.
+On Batocera: installed a new theme? Run install.sh again to give it the logo.
 
 
 Compatibility
@@ -596,8 +598,8 @@ Settings > Save logs for help puts them in one zip for sending.
 - "Can't reach Xbox Cloud Gaming": you're offline. Press A to retry.
 - A page won't load during sign-in: look for "blocked" in
   xcloud-app.log and add that site to "allowed" in config.json.
-- No carousel logo: restart EmulationStation. Themes installed after the
-  app need install.sh run again.
+- No carousel logo: restart EmulationStation. On Batocera, themes
+  installed after the app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
@@ -618,6 +620,10 @@ What's new in 1.3.2
 - HippOS: nothing is put in its system area any more. The logo that was
   copied into HippOS's built-in theme with sudo, and the start script
   that put it back, are gone: HippOS's own themes carry the art.
+- HippOS: a theme added to /userdata/themes after the install gets the
+  carousel art the next time EmulationStation starts. A small start
+  script does it; it only touches /userdata/themes and only adds files
+  that are missing.
 
 What's new in 1.3.1
 -------------------

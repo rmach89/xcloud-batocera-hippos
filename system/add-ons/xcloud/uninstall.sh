@@ -120,7 +120,7 @@ elif [ "$ALL" != 1 ] && [ -t 0 ]; then
 fi
 
 # --- HippOS: the start script earlier versions used for its built-in theme ---
-rm -f "$ES/scripts/start/xcloud-theme-logo.sh"
+rm -f "$ES/scripts/start/xcloud-theme-logo.sh" "$ES/scripts/start/xcloud-theme-art.sh"
 
 # --- Launch Single Game: keep it? (the default is keep) ---
 LS_ARM="$ES/scripts/system-selected/launchsingle-arm.sh"

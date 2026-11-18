@@ -47,7 +47,7 @@ fi
 
 # make sure the package files were copied over
 missing=""
-for f in xcloud.png xcloud-apply-update.sh xcloud-icon.png xcloud-uninstall-icon.png xcloud-settings-icon.png xcloud1.png es_systems_xcloud.cfg gamelist.xml Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json app.asar launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
+for f in xcloud.png xcloud-apply-update.sh xcloud-icon.png xcloud-uninstall-icon.png xcloud-settings-icon.png xcloud1.png es_systems_xcloud.cfg gamelist.xml Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh xcloud-theme-art.sh config.json app.asar launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
     [ -s "$FILES/$f" ] || missing="$missing $f"
 done
 if [ -n "$missing" ]; then
@@ -59,10 +59,10 @@ fi
 mkdir -p "$ES" "$ROMS/images" || { echo "Install failed: could not create folders."; exit 1; }
 
 # strip any Windows line endings picked up while copying, then set permissions
-for f in es_systems_xcloud.cfg gamelist.xml xcloud-apply-update.sh Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh config.json launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
+for f in es_systems_xcloud.cfg gamelist.xml xcloud-apply-update.sh Launch-XboxCloudGaming.sh Run-App.sh Return-To-Carousel.py uninstall.sh Uninstall-From-Menu.sh Build-Runtime.py Sync-GameList.py gamebox3d.py xcloud-service.sh xcloud-theme-art.sh config.json launchsingle/launchsingle-arm.sh launchsingle/launchsingle-launch.sh; do
     tr -d '\r' < "$FILES/$f" > "$FILES/$f.tmp" && mv "$FILES/$f.tmp" "$FILES/$f"
 done
-chmod +x "$FILES/xcloud-service.sh" "$FILES/xcloud-apply-update.sh" "$FILES/Launch-XboxCloudGaming.sh" "$FILES/Run-App.sh" "$FILES/Return-To-Carousel.py" "$FILES/uninstall.sh" "$FILES/Uninstall-From-Menu.sh" "$FILES/Build-Runtime.py" "$FILES/Sync-GameList.py"
+chmod +x "$FILES/xcloud-service.sh" "$FILES/xcloud-theme-art.sh" "$FILES/xcloud-apply-update.sh" "$FILES/Launch-XboxCloudGaming.sh" "$FILES/Run-App.sh" "$FILES/Return-To-Carousel.py" "$FILES/uninstall.sh" "$FILES/Uninstall-From-Menu.sh" "$FILES/Build-Runtime.py" "$FILES/Sync-GameList.py"
 
 # --- Launch Single Game (optional: install.sh asks; XCLOUD_SINGLE_LAUNCH=yes/no) ---
 # Two EmulationStation event scripts: when you pick a system that holds
@@ -208,7 +208,7 @@ THEME_DIRS=("$THEMES"/* /userdata/themes/*)
 if [ "$OS" = hippos ]; then
     # system themes are read-only for the HippOS user and replaced by updates
     THEME_DIRS=(/userdata/themes/*)
-    echo "HippOS: themes in /userdata/themes get the carousel art; HippOS's built-in themes are left to HippOS."
+    echo "HippOS: themes in /userdata/themes get the carousel art; HippOS's built-in themes ship their own."
 fi
 for theme in "${THEME_DIRS[@]}"; do
     [ -d "$theme" ] || continue
@@ -255,7 +255,16 @@ echo "Copied the carousel logo (and background, where the theme has them) into $
 # put it back: the script and its list go (HippOS's next update clears the logo).
 if [ "$OS" = hippos ]; then
     rm -f "$ES/scripts/start/xcloud-theme-logo.sh" "$FILES/hippos-theme-files.txt" "$FILES/xcloud-hippos-logo.sh" "$FILES/xcloud-hippos.png"
-    echo "HippOS: its built-in themes show their own Xbox Cloud Gaming art (or its name); nothing is changed in HippOS's system area."
+    echo "HippOS: its built-in themes show their own Xbox Cloud Gaming art; nothing is changed in HippOS's system area."
+    # themes added to /userdata/themes later get the art the next time
+    # EmulationStation starts (only missing files are added, so most starts
+    # do nothing)
+    if mkdir -p "$ES/scripts/start" && cp -f "$FILES/xcloud-theme-art.sh" "$ES/scripts/start/xcloud-theme-art.sh" \
+       && chmod +x "$ES/scripts/start/xcloud-theme-art.sh"; then
+        echo "HippOS: themes added to /userdata/themes later get the art when EmulationStation starts."
+    fi
+else
+    rm -f "$ES/scripts/start/xcloud-theme-art.sh"
 fi
 
 # stop here if the important parts are missing, leaving the installer in place
@@ -294,6 +303,8 @@ echo "$(date): removing Xbox Cloud Gaming"
 # our links in the system area come down first, before a theme's own
 # pictures are put back (copying onto one of our links would write over the app's)
 [ -f "$FILES/xcloud-service.sh" ] && bash "$FILES/xcloud-service.sh" stop >/dev/null 2>&1
+# and the start script that adds theme art, so it can't add any back
+rm -f "$ES/scripts/start/xcloud-theme-art.sh"
 # the games Settings > Batocera game list added (files, pictures, entries)
 if [ -f "$FILES/gamelist-state.json" ] && [ -f "$FILES/Sync-GameList.py" ]; then
     python3 "$FILES/Sync-GameList.py" off >/dev/null 2>&1 && echo "Removed the games from Batocera's list."
@@ -358,8 +369,8 @@ if [ -f "$CUSTOM" ] && grep -q '# xcloud-boot-restore' "$CUSTOM"; then
 fi
 rm -f "$FILES/created-custom-sh" "$FILES/persist-mode"
 
-# HippOS: the start script earlier versions used for its built-in theme
-rm -f "$ES/scripts/start/xcloud-theme-logo.sh" "$FILES/hippos-theme-files.txt"
+# HippOS: the start scripts for theme art (this version's and older ones')
+rm -f "$ES/scripts/start/xcloud-theme-art.sh" "$ES/scripts/start/xcloud-theme-logo.sh" "$FILES/hippos-theme-files.txt"
 
 # nothing of this package in Ports (also clears entries from older versions)
 rm -f "$PORTS/Install Xbox Cloud Gaming.sh" "$PORTS/Uninstall Xbox Cloud Gaming.sh"
@@ -508,7 +519,7 @@ if [ "$OS" = hippos ] && [ "$(id -u)" = 0 ]; then
     fi
     if [ "$OWNER" != ":" ] && [ "$OWNER" != "0:0" ]; then
         for p in "$FILES" "$ROMS" "$ES/es_systems_xcloud.cfg" "$LS_SCRIPT" "$LS_ARM" "$LIST" \
-                 "$LOGDIR"/xcloud*.log "$APPS"/xcloud-*.desktop "$DESK_APPS"/xcloud-*.desktop \
+                 "$LOGDIR"/xcloud*.log "$ES/scripts/start/xcloud-theme-art.sh" "$APPS"/xcloud-*.desktop "$DESK_APPS"/xcloud-*.desktop \
                  /userdata/themes/*/art/xcloud* /userdata/themes/*/art/logos/xcloud*; do
             [ -e "$p" ] && chown -R "$OWNER" "$p" 2>/dev/null
         done
