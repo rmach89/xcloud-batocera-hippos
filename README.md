@@ -72,7 +72,7 @@ On HippOS the installer asks nothing.
 
 Installed from a `git clone` of this repository? Run `bash install.sh` in it. If main has a newer version than your copy, it offers that one instead.
 
-To install a fixed version instead of the newest (for a distribution that wants to pin one), give its tag: `XCLOUD_TAG=v1.3.2 bash /tmp/xcloud-install.sh`. The app's own updates then follow that tag rather than main.
+To install a fixed version instead of the newest (for a distribution that wants to pin one), give its tag: `XCLOUD_TAG=v1.3.3 bash /tmp/xcloud-install.sh`. The app's own updates then follow that tag rather than main.
 
 ## Updating
 

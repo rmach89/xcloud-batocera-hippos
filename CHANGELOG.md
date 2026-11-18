@@ -2,6 +2,10 @@
 
 Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. The installer always gets the newest one from the main branch (see [Install](README.md#install)).
 
+## 1.3.3
+
+- HippOS: a theme added to /userdata/themes after the install gets the carousel art the next time EmulationStation starts, from a small start script in /userdata/system/configs/emulationstation/scripts/start. It only touches /userdata/themes and only adds files that are missing.
+
 ## 1.3.2
 
 - MIT license.
@@ -10,7 +14,6 @@ Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. The insta
 - An Electron already on the system (v30 or newer, a plain install) is used instead of downloading one, on Batocera and HippOS. Updates leave it to whoever installed it.
 - The stand-in printing library (libcups2) is only installed when the system, or BUA, doesn't have the real one.
 - HippOS: nothing is put in its system area any more. The logo that was copied into HippOS's built-in theme with sudo, and the start script that put it back, are gone: HippOS's own themes carry the art.
-- HippOS: a theme added to /userdata/themes after the install gets the carousel art the next time EmulationStation starts, from a small start script in /userdata/system/configs/emulationstation/scripts/start. It only touches /userdata/themes and only adds files that are missing.
 
 ## 1.3.1
 

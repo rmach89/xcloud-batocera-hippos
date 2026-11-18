@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.3.2 (November 2026)
+Version 1.3.3 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -63,7 +63,7 @@ This file is copied next to the app, as
 /userdata/system/add-ons/xcloud/README.txt.
 
 To install a fixed version instead of the newest, give its tag:
-  XCLOUD_TAG=v1.3.2 bash /tmp/xcloud-install.sh
+  XCLOUD_TAG=v1.3.3 bash /tmp/xcloud-install.sh
 Settings > Updates then follows that tag rather than main.
 
 Run from a copy of the project (git clone), install.sh installs that
@@ -603,6 +603,13 @@ Settings > Save logs for help puts them in one zip for sending.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
 
+What's new in 1.3.3
+-------------------
+- HippOS: a theme added to /userdata/themes after the install gets the
+  carousel art the next time EmulationStation starts. A small start
+  script does it; it only touches /userdata/themes and only adds files
+  that are missing.
+
 What's new in 1.3.2
 -------------------
 - MIT license (LICENSE in the project).
@@ -620,10 +627,6 @@ What's new in 1.3.2
 - HippOS: nothing is put in its system area any more. The logo that was
   copied into HippOS's built-in theme with sudo, and the start script
   that put it back, are gone: HippOS's own themes carry the art.
-- HippOS: a theme added to /userdata/themes after the install gets the
-  carousel art the next time EmulationStation starts. A small start
-  script does it; it only touches /userdata/themes and only adds files
-  that are missing.
 
 What's new in 1.3.1
 -------------------

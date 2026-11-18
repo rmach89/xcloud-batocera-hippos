@@ -7,7 +7,7 @@
 #     bash /tmp/xcloud-install.sh
 # Run from a copy of the repository (git clone), it installs that copy,
 # after offering the newer one if main has moved on.
-# XCLOUD_TAG=v1.3.2 installs that tagged version instead of main, and keeps
+# XCLOUD_TAG=v1.3.3 installs that tagged version instead of main, and keeps
 # the app on it (Settings > Updates then follows the tag, not main): for a
 # distribution that wants to pin a known version.
 # It copies the files into place and installs everything: the xcloud
