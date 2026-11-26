@@ -19,4 +19,18 @@ Unofficial app for Batocera; not made by or affiliated with Microsoft.</desc>
     <players>1-4</players>
     <lang>en</lang>
   </game>
+  <game>
+    <path>./Xbox Cloud Gaming Settings.xcloud</path>
+    <name> Xbox Cloud Gaming Settings</name>
+    <sortname> Xbox Cloud Gaming Settings</sortname>
+    <desc>Opens Xbox Cloud Gaming's Settings straight away, without the Xbox dashboard: profiles and Change user, region and language, volume, the intro, signing out, the Batocera game list and 3D game boxes, controller mapping, logs and updates.
+
+Close Settings to come back here.</desc>
+    <image>./images/xcloud-settings.png</image>
+    <thumbnail>./images/xcloud-settings.png</thumbnail>
+    <developer>Microsoft</developer>
+    <publisher>Microsoft</publisher>
+    <genre>Settings</genre>
+    <lang>en</lang>
+  </game>
 </gameList>

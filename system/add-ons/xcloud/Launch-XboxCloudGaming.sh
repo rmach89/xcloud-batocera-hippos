@@ -4,6 +4,7 @@
 #     (a game's entry holds its Microsoft Store ID: the app opens that game)
 #   from F1 > Applications:                 Launch-XboxCloudGaming.sh
 #   the settings screen only (F1 shortcut): Launch-XboxCloudGaming.sh --settings
+#     (also the "Xbox Cloud Gaming Settings" entry in the game list: its file says "settings")
 FILES=/userdata/system/add-ons/xcloud
 RUNTIME="$FILES/runtime"
 LOGDIR=/userdata/system/logs
@@ -26,9 +27,13 @@ OS=batocera
 TRIGGER=""
 # a game from Batocera's list (Settings > Batocera game list): its ID
 GAME_ARG=""
+SETTINGS_ENTRY=0
 if [ "$1" = "--from-es" ] && [ -f "$2" ]; then
     id="$(head -c 64 "$2" | tr -d '\r\n[:space:]')"
-    if printf '%s' "$id" | grep -qE '^[0-9A-Z]{12}$'; then
+    if [ "$id" = settings ]; then
+        SETTINGS_ENTRY=1
+        echo "the Settings entry in the game list: Settings only"
+    elif printf '%s' "$id" | grep -qE '^[0-9A-Z]{12}$'; then
         GAME_ARG="--xcloud-game=$id"
         echo "game from Batocera's list: $id ($(basename "$2"))"
     fi
@@ -89,7 +94,7 @@ if [ "$OS" = hippos ] && command -v hippos-hotkeys >/dev/null 2>&1; then
     hippos-hotkeys --new-context xcloud '{}' >/dev/null 2>&1 && echo "HippOS: its controller hotkeys are off while the app is open"
 fi
 
-if [ "$1" = "--settings" ]; then
+if [ "$1" = "--settings" ] || [ "$SETTINGS_ENTRY" = 1 ]; then
     bash "$FILES/Run-App.sh" --xcloud-settings
 else
     bash "$FILES/Run-App.sh" $GAME_ARG

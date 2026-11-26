@@ -2,6 +2,11 @@
 
 Every version of the Xbox Cloud Gaming add-on for Batocera and HippOS. The installer always gets the newest one from the main branch (see [Install](README.md#install)).
 
+## 1.3.4
+
+- **Xbox Cloud Gaming Settings** is in the Xbox Cloud Gaming game list, right under " Xbox Cloud Gaming" (Batocera and HippOS), with the settings icon. It opens just the Settings screen, like the F1 shortcut, and closing it brings you back to the list. Both entries stay at the top when the cloud games are listed too.
+- With that second entry the xcloud system has two entries, so Launch Single Game no longer opens the app straight from the carousel: you get the list and pick the app or its Settings.
+
 ## 1.3.3
 
 - HippOS: a theme added to /userdata/themes after the install gets the carousel art the next time EmulationStation starts, from a small start script in /userdata/system/configs/emulationstation/scripts/start. It only touches /userdata/themes and only adds files that are missing.

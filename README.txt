@@ -1,6 +1,6 @@
 XBOX CLOUD GAMING for Batocera & HippOS
 =======================================
-Version 1.3.3 (November 2026)
+Version 1.3.4 (November 2026)
 Home page and new versions: https://github.com/rmach89/xcloud-batocera-hippos
 
 An unofficial, fan-made app, used at your own risk. It is not made,
@@ -602,6 +602,17 @@ Settings > Save logs for help puts them in one zip for sending.
   installed after the app need install.sh run again.
 Problems or ideas: https://github.com/rmach89/xcloud-batocera-hippos/issues
 
+
+What's new in 1.3.4
+-------------------
+- "Xbox Cloud Gaming Settings" is in the Xbox Cloud Gaming game list,
+  right under " Xbox Cloud Gaming" (Batocera and HippOS), with the
+  settings icon: it opens just the Settings screen, like the F1
+  shortcut, and closing it brings you back to the list. Both entries
+  stay at the top when the cloud games are listed too.
+- With that second entry the xcloud system has two entries, so Launch
+  Single Game no longer opens the app straight from the carousel: you
+  get the list and pick the app or its Settings.
 
 What's new in 1.3.3
 -------------------
