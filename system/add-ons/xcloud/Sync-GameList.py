@@ -59,6 +59,7 @@ CLOUD_LIST = "29a81209-df6f-41fd-a528-2ae6b91f719c"
 FREE_ADS_LIST = "51f14e5d-bdcb-4e04-b9cb-76e5057702df"
 FEATURE_LISTS = {"mkb": "8fa264dd-124f-4af3-97e8-596fcdf4b486", "touch": "9c86f07a-f3e8-45ad-82a0-a1f759597059"}
 DASHBOARD = "./Xbox Cloud Gaming.xcloud"
+SETTINGS_ENTRY = "./Xbox Cloud Gaming Settings.xcloud"
 UA = "xcloud-app-gamelist/1.0"
 ID_RE = re.compile(r"^[0-9A-Z]{12}$")
 # the play counts and choices Batocera keeps for a game, kept across updates
@@ -353,7 +354,7 @@ def sized(url, w, jpg=True):
 
 # ---------- gamelist.xml ----------
 def load_gamelist():
-    """Batocera's list as it is (a damaged one is left alone), with the app's own entry."""
+    """Batocera's list as it is (a damaged one is left alone), with the app's own entries."""
     if os.path.exists(GAMELIST):
         try:
             root = ET.parse(GAMELIST).getroot()
@@ -361,31 +362,37 @@ def load_gamelist():
             raise RuntimeError(f"{GAMELIST} couldn't be read ({e}); it was left as it is")
     else:
         root = ET.Element("gameList")
-    if not any((g.findtext("path") or "") == DASHBOARD for g in root.findall("game")):
-        try:
-            root.insert(0, ET.parse(os.path.join(FILES, "gamelist.xml")).getroot().find("game"))
-        except Exception:
-            pass
+    have = {g.findtext("path") or "" for g in root.findall("game")}
+    try:
+        ours = ET.parse(os.path.join(FILES, "gamelist.xml")).getroot().findall("game")
+    except Exception:
+        ours = []
+    for i, g in enumerate(ours):
+        p = g.findtext("path") or ""
+        if p not in have and (p != SETTINGS_ENTRY or os.path.exists(os.path.join(ROMS, p[2:]))):
+            root.insert(i, g)
     return root
 
 
 PINNED = " Xbox Cloud Gaming"   # a space first: it sorts before every letter, number and symbol
+PINNED_NAMES = {DASHBOARD: PINNED, SETTINGS_ENTRY: PINNED + " Settings"}   # Settings right after the app
 
 
-def pin_first(g):
+def pin_first(g, path=DASHBOARD):
     """The app's own entry stays at the top of the list: its sort name for
     EmulationStation versions that use one (Batocera since December 2025, HippOS),
     and its name for the ones that sort by the name itself; both start with a space."""
+    pinned = PINNED_NAMES.get(path, PINNED)
     sn = g.find("sortname")
     if sn is None:
-        sub(g, "sortname", PINNED)
+        sub(g, "sortname", pinned)
     elif not (sn.text or "").startswith(" "):   # "!Xbox Cloud Gaming" from earlier versions
-        sn.text = PINNED
+        sn.text = pinned
     n = g.find("name")
     if n is None:
         n = ET.SubElement(g, "name")
     if not (n.text or "").startswith(" "):
-        n.text = " " + (n.text or "Xbox Cloud Gaming").strip()
+        n.text = " " + (n.text or pinned.strip()).strip()
 
 
 def sub(game, tag, text):
@@ -659,8 +666,8 @@ def list_games(info, got, boxes, state, covers=None):
         if p in gone or any(p == v.get("file") for v in state["games"].values()):
             old[p] = g
             root.remove(g)
-        elif p == DASHBOARD:
-            pin_first(g)
+        elif p in PINNED_NAMES:
+            pin_first(g, p)
 
     used = {os.path.basename(v.get("file", "")) for v in state["games"].values()}
     for pid in sorted(info, key=lambda i: info[i]["title"].lower()):

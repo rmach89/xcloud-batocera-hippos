@@ -161,7 +161,8 @@ elif [ -f "$PORTS/Uninstall Xbox Cloud Gaming.sh" ]; then
 else
     say "Xbox Cloud Gaming's uninstaller wasn't found; removing its files directly..."
     rm -f "$ES/es_systems_xcloud.cfg"
-    rm -f "$USERDATA/roms/xcloud/Xbox Cloud Gaming.xcloud" "$USERDATA/roms/xcloud/gamelist.xml" "$USERDATA/roms/xcloud/images/xcloud.png"
+    rm -f "$USERDATA/roms/xcloud/Xbox Cloud Gaming.xcloud" "$USERDATA/roms/xcloud/Xbox Cloud Gaming Settings.xcloud" "$USERDATA/roms/xcloud/gamelist.xml" \
+          "$USERDATA/roms/xcloud/images/xcloud.png" "$USERDATA/roms/xcloud/images/xcloud-settings.png"
     rmdir "$USERDATA/roms/xcloud/images" "$USERDATA/roms/xcloud" 2>/dev/null
     rm -rf "$FILES/runtime" "$FILES/runtime.old" "$FILES/runtime.next" "$FILES/update-staged" "$FILES/update-staged.new" "$FILES/runtime-shared.json"
     rm -f "$USERDATA/system/.local/share/applications/xcloud-xbox-cloud-gaming.desktop" \

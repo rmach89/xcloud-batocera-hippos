@@ -47,7 +47,9 @@ What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Split screen** (optional, off by default): 2 to 4 players on one screen. Player 1 uses the first controller; the others press A to join the next box and pick a profile or play as a guest. Each player's selection is in their own colour: green, red, blue, yellow (the A, B, X and Y colours). Guests are forgotten when the app closes unless "Remember split-screen players" is on.
 
-**Launch Single Game** (optional): picking Xbox Cloud Gaming in the carousel opens the app straight away, and closing it takes you back to the carousel.
+**Xbox Cloud Gaming Settings** is in the game list too, right under the app: it opens just the Settings screen.
+
+**Launch Single Game** (optional): picking a one-game system in the carousel opens it straight away, and closing it takes you back to the carousel. The xcloud system has two entries (the app and its Settings), so it shows its list.
 
 ## What you need
 

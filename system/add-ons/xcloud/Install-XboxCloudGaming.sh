@@ -28,6 +28,7 @@ PORTS=/userdata/roms/ports
 APPS=/userdata/system/.local/share/applications
 SYSAPPS=/usr/share/applications   # where Batocera's F1 > Applications looks (system area)
 GAME="Xbox Cloud Gaming.xcloud"
+SETTINGS_GAME="Xbox Cloud Gaming Settings.xcloud"
 # Batocera or HippOS (a Debian-based system built like Batocera: same
 # /userdata, same EmulationStation family). On HippOS EmulationStation runs
 # as a normal user and every update replaces the system area, so nothing
@@ -118,6 +119,8 @@ cp -f "$FILES/es_systems_xcloud.cfg" "$ES/es_systems_xcloud.cfg"
 
 # one placeholder "game", its name and your artwork
 echo "Placeholder for Xbox Cloud Gaming. Launching it opens the Xbox Cloud Gaming app." > "$ROMS/$GAME"
+# the Settings entry: opens the app's Settings only (Launch-XboxCloudGaming.sh reads "settings")
+echo settings > "$ROMS/$SETTINGS_GAME"
 # the game list: the app's entry (description, developer, genre, players...)
 # replaces an older one; anything else already in the list is kept
 if [ ! -f "$ROMS/gamelist.xml" ]; then
@@ -127,17 +130,18 @@ else
 import re, sys
 mine, ours = sys.argv[1], sys.argv[2]
 text = open(mine, encoding="utf-8", errors="replace").read()
-entry = re.search(r"[ \t]*<game>.*?</game>\s*", open(ours, encoding="utf-8").read(), re.S).group(0)
+entries = "".join(re.findall(r"[ \t]*<game>.*?</game>\s*", open(ours, encoding="utf-8").read(), re.S))
 if "</gameList>" not in text:
     raise SystemExit(1)
-# drop the old entry for the app (by its path), keep the rest
-text = re.sub(r"[ \t]*<game>(?:(?!</game>).)*?<path>\./Xbox Cloud Gaming\.xcloud</path>.*?</game>\s*", "", text, flags=re.S)
-text = text.replace("</gameList>", entry + "</gameList>", 1)
+# drop the old entries for the app and its Settings (by their paths), keep the rest
+text = re.sub(r"[ \t]*<game>(?:(?!</game>).)*?<path>\./Xbox Cloud Gaming( Settings)?\.xcloud</path>.*?</game>\s*", "", text, flags=re.S)
+text = text.replace("</gameList>", entries + "</gameList>", 1)
 open(mine, "w", encoding="utf-8").write(text)
 GAMELIST_EOF
 fi
 # the entry's picture (screenshot/thumbnail): the cloud icon, square, fits the tile
 cp -f "$FILES/xcloud-icon.png" "$ROMS/images/xcloud.png"
+cp -f "$FILES/xcloud-settings-icon.png" "$ROMS/images/xcloud-settings.png"
 
 # launch-single-game allow-list (only when it was chosen)
 if [ "$SINGLE" != yes ]; then
@@ -310,7 +314,7 @@ if [ -f "$FILES/gamelist-state.json" ] && [ -f "$FILES/Sync-GameList.py" ]; then
     python3 "$FILES/Sync-GameList.py" off >/dev/null 2>&1 && echo "Removed the games from Batocera's list."
 fi
 rm -f "$ES/es_systems_xcloud.cfg"
-rm -f "$ROMS/Xbox Cloud Gaming.xcloud" "$ROMS/gamelist.xml" "$ROMS/images/xcloud.png"
+rm -f "$ROMS/Xbox Cloud Gaming.xcloud" "$ROMS/Xbox Cloud Gaming Settings.xcloud" "$ROMS/gamelist.xml" "$ROMS/images/xcloud.png" "$ROMS/images/xcloud-settings.png"
 rmdir "$ROMS/images" "$ROMS" 2>/dev/null
 
 # take xcloud off the allow-list, only if the installer put it there
